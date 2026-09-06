@@ -46,6 +46,18 @@ export default defineConfig({
         launchOptions: { slowMo: 250 },
       },
     },
+    {
+      name: "portfolio30",
+      testMatch: /portfolio-demo-30s\.spec\.ts/,
+      timeout: 240_000,
+      outputDir: "./artifacts/portfolio-demo",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 800 },
+        video: { mode: "on", size: { width: 1280, height: 800 } },
+        launchOptions: { slowMo: 150 },
+      },
+    },
   ],
   webServer: {
     command: "npm run demo",
