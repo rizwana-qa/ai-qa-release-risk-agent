@@ -7,7 +7,14 @@
     { "src": "api/vercel/scenario.ts", "use": "@vercel/node" },
     { "src": "api/vercel/assess.ts", "use": "@vercel/node" },
     { "src": "api/vercel/assess-custom.ts", "use": "@vercel/node" },
-    { "src": "web/**", "use": "@vercel/static" }
+    { "src": "web/index.html", "use": "@vercel/static" },
+    { "src": "web/styles.css", "use": "@vercel/static" },
+    { "src": "web/app.js", "use": "@vercel/static" },
+    { "src": "web/workspace.js", "use": "@vercel/static" },
+    { "src": "web/components.js", "use": "@vercel/static" },
+    { "src": "web/format.js", "use": "@vercel/static" },
+    { "src": "web/icons.js", "use": "@vercel/static" },
+    { "src": "web/upload.js", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "^/api/health$", "dest": "/api/vercel/health.ts" },
