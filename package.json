@@ -1,0 +1,45 @@
+{
+  "name": "ai-qa-release-risk-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-assisted QA release risk and test strategy agent for a single synthetic banking change. AI explains the risk; a deterministic rules layer makes the GO / NO GO / CONDITIONAL decision.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "ai-assisted-qa",
+    "quality-engineering",
+    "release-risk",
+    "test-strategy",
+    "mcp",
+    "gemini",
+    "n8n"
+  ],
+  "engines": {
+    "node": ">=23.6"
+  },
+  "scripts": {
+    "start": "node api/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test \"tests/**/*.test.ts\" \"tests/**/*.test.mjs\"",
+    "test:e2e": "playwright test --project=chromium",
+    "test:demo": "playwright test --project=demo",
+    "test:demo:headed": "playwright test --project=demo --headed",
+    "demo:video": "playwright test --project=demo && node scripts/finalize-demo-video.mjs",
+    "check": "npm run typecheck && npm test",
+    "mcp": "node src/mcpServer.ts",
+    "agent": "node src/geminiAgent.ts",
+    "pipeline": "node src/pipelineCli.ts",
+    "demo": "node api/server.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "@google/genai": "^1.52.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.5.4"
+  }
+}

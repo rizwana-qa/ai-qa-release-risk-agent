@@ -1,0 +1,33 @@
+# Keep the Docker build context small. The Dockerfile copies only the
+# directories it needs, but excluding these speeds up the build and avoids
+# shipping tests, docs, or local state.
+
+.git
+.gitignore
+.gitattributes
+node_modules
+dist
+*.tsbuildinfo
+
+# Local / CI-only
+.pipeline-run
+test-results
+playwright-report
+blob-report
+playwright
+playwright.config.ts
+tests
+examples
+docs
+*.md
+CLAUDE.md
+
+# Never ship secrets or editor state
+.env
+.env.*
+*.local
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "disclaimer": "Synthetic, illustrative defect inventory for a personal portfolio project. Not real defects; contains no real company or production information.",
+  "servedByTool": "get_known_defects",
+  "scenario": "REQ-BEN-001",
+  "severities": ["critical", "high", "medium", "low"],
+  "statuses": ["open", "closed"],
+  "defects": [
+    {
+      "defectId": "DEF-001",
+      "severity": "high",
+      "status": "open",
+      "area": "validation",
+      "security": false,
+      "relatedAcceptanceCriteria": ["AC-3"],
+      "description": "Beneficiary display name accepts input far longer than the supported length without rejection, leading to inconsistent storage and truncated display."
+    },
+    {
+      "defectId": "DEF-002",
+      "severity": "medium",
+      "status": "closed",
+      "area": "beneficiary-management",
+      "security": false,
+      "relatedAcceptanceCriteria": ["AC-1"],
+      "description": "Submitting the add-beneficiary form twice in quick succession could create duplicate beneficiary entries. Fixed by de-duplicating on account identifier."
+    },
+    {
+      "defectId": "DEF-003",
+      "severity": "critical",
+      "status": "closed",
+      "area": "money-transfer",
+      "security": false,
+      "relatedAcceptanceCriteria": ["AC-5"],
+      "description": "Double-clicking the confirm button could submit a transfer twice, producing a duplicate debit. Fixed with an idempotency key on transfer submission."
+    },
+    {
+      "defectId": "DEF-004",
+      "severity": "high",
+      "status": "open",
+      "area": "authentication",
+      "security": true,
+      "relatedAcceptanceCriteria": ["AC-2"],
+      "description": "Step-up authentication is not re-challenged when adding a beneficiary during an already-elevated session, so a beneficiary can be added without a fresh one-time code."
+    },
+    {
+      "defectId": "DEF-005",
+      "severity": "low",
+      "status": "open",
+      "area": "authorization",
+      "security": true,
+      "relatedAcceptanceCriteria": ["AC-4"],
+      "description": "The error returned when requesting another customer's beneficiary differs for existing versus non-existing identifiers, allowing beneficiary-identifier existence to be inferred."
+    }
+  ]
+}

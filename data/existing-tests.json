@@ -1,0 +1,178 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "disclaimer": "Synthetic, illustrative test inventory for a personal portfolio project. Not a real test suite; contains no real company or production information.",
+  "servedByTool": "get_existing_tests",
+  "scenario": "REQ-BEN-001",
+  "testTypes": ["unit", "integration", "e2e"],
+  "coverageTypes": ["positive", "negative", "boundary"],
+  "statuses": ["active", "quarantined"],
+  "areas": [
+    "authentication",
+    "beneficiary-management",
+    "money-transfer",
+    "authorization",
+    "security",
+    "validation"
+  ],
+  "tests": [
+    {
+      "testId": "TEST-AUTH-001",
+      "title": "Customer authenticates successfully with valid credentials",
+      "area": "authentication",
+      "testType": "integration",
+      "coverageType": "positive",
+      "status": "active",
+      "covers": ["AC-2"]
+    },
+    {
+      "testId": "TEST-AUTH-002",
+      "title": "Authentication is rejected with invalid credentials",
+      "area": "authentication",
+      "testType": "integration",
+      "coverageType": "negative",
+      "status": "active",
+      "covers": ["AC-6"]
+    },
+    {
+      "testId": "TEST-BEN-001",
+      "title": "Add a beneficiary with valid details",
+      "area": "beneficiary-management",
+      "testType": "e2e",
+      "coverageType": "positive",
+      "status": "active",
+      "covers": ["AC-1"]
+    },
+    {
+      "testId": "TEST-BEN-002",
+      "title": "Newly added beneficiary appears in the owner's beneficiary list",
+      "area": "beneficiary-management",
+      "testType": "integration",
+      "coverageType": "positive",
+      "status": "active",
+      "covers": ["AC-1"]
+    },
+    {
+      "testId": "TEST-VAL-001",
+      "title": "Reject a beneficiary with missing required fields",
+      "area": "validation",
+      "testType": "unit",
+      "coverageType": "negative",
+      "status": "active",
+      "covers": ["AC-3"]
+    },
+    {
+      "testId": "TEST-VAL-002",
+      "title": "Reject a beneficiary with a malformed account identifier",
+      "area": "validation",
+      "testType": "unit",
+      "coverageType": "negative",
+      "status": "active",
+      "covers": ["AC-3"]
+    },
+    {
+      "testId": "TEST-AUTHZ-001",
+      "title": "A customer cannot view another customer's beneficiaries",
+      "area": "authorization",
+      "testType": "integration",
+      "coverageType": "negative",
+      "status": "active",
+      "covers": ["AC-4"]
+    },
+    {
+      "testId": "TEST-XFER-001",
+      "title": "Authenticated owner transfers money to an existing beneficiary",
+      "area": "money-transfer",
+      "testType": "e2e",
+      "coverageType": "positive",
+      "status": "active",
+      "covers": ["AC-5"]
+    },
+    {
+      "testId": "TEST-XFER-002",
+      "title": "Transfer exceeding available balance is rejected",
+      "area": "money-transfer",
+      "testType": "integration",
+      "coverageType": "boundary",
+      "status": "active",
+      "covers": ["AC-7"]
+    },
+    {
+      "testId": "TEST-XFER-003",
+      "title": "Transfer with a zero or negative amount is rejected",
+      "area": "validation",
+      "testType": "unit",
+      "coverageType": "negative",
+      "status": "active",
+      "covers": ["AC-7"]
+    },
+    {
+      "testId": "TEST-SEC-001",
+      "title": "Sensitive values are absent from API responses and application logs",
+      "area": "security",
+      "testType": "integration",
+      "coverageType": "negative",
+      "status": "quarantined",
+      "covers": ["AC-8"],
+      "note": "Disabled due to flakiness in the synthetic test environment (illustrative). Provides no active coverage for AC-8."
+    }
+  ],
+  "coverageByAcceptanceCriterion": [
+    {
+      "acceptanceCriterionId": "AC-1",
+      "area": "beneficiary-management",
+      "mappedTests": ["TEST-BEN-001", "TEST-BEN-002"],
+      "activeTests": ["TEST-BEN-001", "TEST-BEN-002"],
+      "covered": true
+    },
+    {
+      "acceptanceCriterionId": "AC-2",
+      "area": "authentication",
+      "mappedTests": ["TEST-AUTH-001"],
+      "activeTests": ["TEST-AUTH-001"],
+      "covered": true
+    },
+    {
+      "acceptanceCriterionId": "AC-3",
+      "area": "validation",
+      "mappedTests": ["TEST-VAL-001", "TEST-VAL-002"],
+      "activeTests": ["TEST-VAL-001", "TEST-VAL-002"],
+      "covered": true
+    },
+    {
+      "acceptanceCriterionId": "AC-4",
+      "area": "authorization",
+      "mappedTests": ["TEST-AUTHZ-001"],
+      "activeTests": ["TEST-AUTHZ-001"],
+      "covered": true
+    },
+    {
+      "acceptanceCriterionId": "AC-5",
+      "area": "money-transfer",
+      "mappedTests": ["TEST-XFER-001"],
+      "activeTests": ["TEST-XFER-001"],
+      "covered": true
+    },
+    {
+      "acceptanceCriterionId": "AC-6",
+      "area": "authentication",
+      "mappedTests": ["TEST-AUTH-002"],
+      "activeTests": ["TEST-AUTH-002"],
+      "covered": true
+    },
+    {
+      "acceptanceCriterionId": "AC-7",
+      "area": "validation",
+      "mappedTests": ["TEST-XFER-002", "TEST-XFER-003"],
+      "activeTests": ["TEST-XFER-002", "TEST-XFER-003"],
+      "covered": true
+    },
+    {
+      "acceptanceCriterionId": "AC-8",
+      "area": "security",
+      "mappedTests": ["TEST-SEC-001"],
+      "activeTests": [],
+      "covered": false
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI QA Release Risk &amp; Test Strategy</title>
+    <meta
+      name="description"
+      content="A workspace where QA and product teams assess release risk from supplied evidence. A deterministic QA gate makes the final release decision."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%232563eb'/%3E%3Cpath d='M4.3 8.4l2.2 2.2 5-5' stroke='white' stroke-width='1.7' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="container topbar__inner">
+          <div class="topbar__brand">
+            <span class="topbar__mark" aria-hidden="true"></span>
+            <span class="topbar__names">
+              <span class="topbar__product">AI QA Release Risk &amp; Test Strategy</span>
+              <span class="topbar__kicker">Release Risk Assessment Workspace</span>
+            </span>
+          </div>
+
+          <span class="topbar__spacer"></span>
+
+          <nav class="flow" id="topbar-steps" aria-label="Workflow steps">
+            <span class="flow__step" data-step="context">
+              <span class="flow__num"><span class="flow__digits">01</span></span>
+              <span class="flow__label">Context</span>
+            </span>
+            <span class="flow__step" data-step="evidence">
+              <span class="flow__num"><span class="flow__digits">02</span></span>
+              <span class="flow__label">Evidence</span>
+            </span>
+            <span class="flow__step" data-step="analyze">
+              <span class="flow__num"><span class="flow__digits">03</span></span>
+              <span class="flow__label">Analyze</span>
+            </span>
+            <span class="flow__step" data-step="review">
+              <span class="flow__num"><span class="flow__digits">04</span></span>
+              <span class="flow__label">Review</span>
+            </span>
+            <span class="flow__compact" aria-hidden="true">
+              <span class="flow__compact-label"></span>
+              <span class="flow__compact-bar"><span class="flow__compact-fill"></span></span>
+            </span>
+          </nav>
+
+          <button
+            class="btn btn--relaunch"
+            id="relaunch-btn"
+            type="button"
+            data-act="relaunch"
+            aria-label="Relaunch to update"
+            hidden
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/>
+            </svg>
+            <span class="btn--relaunch__label">Relaunch to update</span>
+          </button>
+
+          <div class="topbar__menu">
+            <button
+              class="topbar__menu-btn"
+              id="menu-btn"
+              type="button"
+              aria-haspopup="true"
+              aria-expanded="false"
+              aria-label="Demo and regression options"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <circle cx="12" cy="5" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="12" cy="19" r="1" />
+              </svg>
+            </button>
+            <div class="topbar__menu-list" id="menu-list" hidden role="menu">
+              <span class="hint">Demo / Regression fixture</span>
+              <button type="button" role="menuitem" data-act="run-demo">Run REQ-BEN-001 regression fixture</button>
+              <button type="button" role="menuitem" data-act="load-example">Start from the worked example</button>
+              <button type="button" role="menuitem" data-act="new">New blank assessment</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="container app-main">
+        <div id="view" aria-live="polite"><!-- rendered by app.js --></div>
+      </main>
+
+      <footer class="sitefoot">
+        <div class="container">
+          <p class="sitefoot__by">Created by Rizwana Zahoor | 2026</p>
+          <p class="sitefoot__product">AI QA Release Risk &amp; Test Strategy</p>
+        </div>
+      </footer>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

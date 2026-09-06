@@ -1,0 +1,33 @@
+# Render blueprint — https://render.com/docs/blueprint-spec
+#
+# One always-on Node web service that serves the frontend, the assessment API,
+# the SSE progress stream, and the per-assessment child-process pipeline from the
+# same deployment. Built from the Dockerfile so the runtime is Node 24 (native
+# TypeScript execution needs >= 23.6).
+#
+# Deploy: push this repo to GitHub, then in Render choose "New +" -> "Blueprint"
+# and point it at the repo. No secrets are required — the app runs in rules-based
+# mode by default.
+
+services:
+  - type: web
+    name: ai-qa-release-risk-agent
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: NODE_ENV
+        value: production
+      # PORT is injected by Render automatically; the server reads process.env.PORT.
+      #
+      # Optional — enables a live Gemini 3.6 Flash analysis for both the built-in
+      # REQ-BEN-001 fixture and user-submitted custom assessments. If the key is
+      # unset, or a Gemini call fails to produce valid findings, the app safely
+      # falls back to the existing rules-based analysis. Add the value in the
+      # Render dashboard, never in git.
+      - key: GEMINI_API_KEY
+        sync: false

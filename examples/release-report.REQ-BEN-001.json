@@ -1,0 +1,79 @@
+{
+  "scenario": "REQ-BEN-001",
+  "decisionAuthority": "evaluateReleaseGate() (deterministic) — the AI agent explains the risk, it does not decide",
+  "releaseDecision": "NO_GO",
+  "firedRule": "GATE-2",
+  "reasons": [
+    "GATE-2: security failure.",
+    "SEC-1: open security-flagged defect(s) at qualifying severity: DEF-004.",
+    "SEC-2: security acceptance criteria without active coverage: AC-8."
+  ],
+  "aiQaExplanation": "The change spans authentication, authorization, money movement and security. Coverage is broadly present, but the security acceptance criterion (AC-8) has no active test and an open security defect (DEF-004) affects step-up authentication. Regression testing should concentrate on transfers and authentication paths.",
+  "changeSummary": "Adds a beneficiary and lets an authenticated customer transfer money to that beneficiary after authentication.",
+  "identifiedRisks": [
+    {
+      "area": "authentication",
+      "description": "Step-up authentication may be skippable inside an already-elevated session.",
+      "severity": "high"
+    },
+    {
+      "area": "money-transfer",
+      "description": "Moving money to a newly added payee is a high blast-radius action.",
+      "severity": "high"
+    },
+    {
+      "area": "security",
+      "description": "Sensitive fields (OTP, full account id) could leak in responses or logs.",
+      "severity": "high"
+    },
+    {
+      "area": "authorization",
+      "description": "Ownership checks must cover transfer, not just viewing.",
+      "severity": "medium"
+    }
+  ],
+  "coverageAssessment": [
+    { "acceptanceCriterionId": "AC-1", "covered": true, "notes": "Add + list beneficiary covered." },
+    { "acceptanceCriterionId": "AC-2", "covered": true, "notes": "Happy-path step-up only; no failure case." },
+    { "acceptanceCriterionId": "AC-3", "covered": true, "notes": "Two negative validation tests." },
+    { "acceptanceCriterionId": "AC-4", "covered": true, "notes": "One cross-customer denial test." },
+    { "acceptanceCriterionId": "AC-5", "covered": true, "notes": "Transfer happy path." },
+    { "acceptanceCriterionId": "AC-6", "covered": true, "notes": "Login failure only; not transfer-session invalidation." },
+    { "acceptanceCriterionId": "AC-7", "covered": true, "notes": "Balance and non-positive amount checked." },
+    { "acceptanceCriterionId": "AC-8", "covered": false, "notes": "Only mapped test is quarantined." }
+  ],
+  "missingScenarios": [
+    "Transfer to a beneficiary owned by another customer is rejected.",
+    "Step-up authentication failure blocks adding a beneficiary.",
+    "Sensitive values are absent from logs (with an active test)."
+  ],
+  "defectReview": [
+    { "defectId": "DEF-001", "stillRelevant": true, "notes": "Open validation gap on beneficiary name length." },
+    { "defectId": "DEF-002", "stillRelevant": false, "notes": "Closed; dedupe on account identifier." },
+    { "defectId": "DEF-003", "stillRelevant": false, "notes": "Closed; idempotency key on transfer submit." },
+    { "defectId": "DEF-004", "stillRelevant": true, "notes": "Open security defect: step-up not re-challenged." },
+    { "defectId": "DEF-005", "stillRelevant": true, "notes": "Low-severity beneficiary-id existence oracle." }
+  ],
+  "regressionPriorities": [
+    { "area": "money-transfer", "priority": "high", "rationale": "High inherent risk and a prior critical defect." },
+    { "area": "authentication", "priority": "high", "rationale": "Open security-flagged defect on step-up." },
+    { "area": "security", "priority": "high", "rationale": "Critical criterion AC-8 has no active test." },
+    { "area": "authorization", "priority": "medium", "rationale": "Only one denial test present." }
+  ],
+  "dataProvenance": {
+    "requirementId": "REQ-BEN-001",
+    "acceptanceCriteriaCount": 8,
+    "existingTestCount": 11,
+    "knownDefectCount": 5,
+    "riskRulesScenario": "REQ-BEN-001"
+  },
+  "agentOutputValid": true,
+  "adapterOk": true,
+  "pipelineTrace": [
+    { "step": "retrieve-qa-data-mcp", "ok": true, "detail": "4 MCP tools" },
+    { "step": "ai-reasoning", "ok": true },
+    { "step": "validate-structured-findings", "ok": true },
+    { "step": "deterministic-adapter", "ok": true },
+    { "step": "deterministic-release-gate", "ok": true, "detail": "NO_GO (GATE-2)" }
+  ]
+}

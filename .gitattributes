@@ -1,0 +1,7 @@
+* text=auto eol=lf
+
+# Binary fixtures — never normalise line endings or attempt text diffs.
+*.pdf   binary
+*.webm  binary
+*.png   binary
+*.zip   binary

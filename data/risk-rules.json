@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "disclaimer": "Synthetic, illustrative risk rules for a personal portfolio project. Values marked illustrative are arbitrary example numbers, not real policy or benchmarks.",
+  "servedByTool": "get_risk_rules",
+  "scenario": "REQ-BEN-001",
+  "areas": [
+    "authentication",
+    "beneficiary-management",
+    "money-transfer",
+    "authorization",
+    "security",
+    "validation"
+  ],
+  "riskLevelsByArea": {
+    "authentication": "high",
+    "beneficiary-management": "medium",
+    "money-transfer": "high",
+    "authorization": "high",
+    "security": "high",
+    "validation": "medium"
+  },
+  "riskLevelOrdering": ["low", "medium", "high"],
+  "changeRiskLevelRule": {
+    "description": "The overall risk level of a change is the highest riskLevelsByArea value among the requirement's affectedAreas, using riskLevelOrdering."
+  },
+  "criticalAcceptanceCriteriaRule": {
+    "description": "An acceptance criterion is treated as critical when its 'critical' flag is true in requirement.json, OR when its area is one of the listed criticalAreas.",
+    "criticalAreas": ["authentication", "authorization", "money-transfer", "security"]
+  },
+  "insufficientCoverageRule": {
+    "description": "Coverage for the change is 'insufficient' if ANY of the following conditions is true.",
+    "conditions": [
+      {
+        "id": "COV-1",
+        "text": "A critical acceptance criterion has zero active mapped tests (a test whose status is 'active')."
+      },
+      {
+        "id": "COV-2",
+        "text": "A high-risk affected area has no active test with coverageType 'negative'."
+      },
+      {
+        "id": "COV-3",
+        "text": "The active acceptance-criterion coverage ratio (criteria with at least one active test, divided by total criteria) is below the illustrative threshold.",
+        "illustrativeThreshold": 0.8
+      }
+    ]
+  },
+  "securityFailureRule": {
+    "description": "A 'security failure' exists if ANY of the following is true.",
+    "conditions": [
+      {
+        "id": "SEC-1",
+        "text": "There is a defect with status 'open', security = true, and severity 'critical' or 'high'."
+      },
+      {
+        "id": "SEC-2",
+        "text": "An acceptance criterion whose area is 'security' has zero active mapped tests."
+      }
+    ]
+  },
+  "regressionPriorityRule": {
+    "description": "Rank affected areas for regression testing by the following ordered factors; earlier factors dominate.",
+    "factors": [
+      "Inherent area risk from riskLevelsByArea (high before medium before low).",
+      "Area has one or more open defects.",
+      "Area has a critical acceptance criterion that has no active coverage.",
+      "Area is security-sensitive (area is 'security' or 'authentication')."
+    ]
+  },
+  "releaseGateRules": {
+    "note": "These deterministic rules are the final release decision authority. They will be enforced by code in a later phase, NOT by the language model. The language model may explain the reasoning but must not produce or override the GO / NO_GO / CONDITIONAL decision.",
+    "decisions": ["GO", "NO_GO", "CONDITIONAL"],
+    "evaluationOrder": ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-5"],
+    "rules": [
+      {
+        "id": "GATE-1",
+        "condition": "At least one defect with status 'open' and severity 'critical'.",
+        "decision": "NO_GO"
+      },
+      {
+        "id": "GATE-2",
+        "condition": "securityFailureRule evaluates to true.",
+        "decision": "NO_GO"
+      },
+      {
+        "id": "GATE-3",
+        "condition": "At least one critical acceptance criterion (per criticalAcceptanceCriteriaRule) with zero active mapped tests.",
+        "decision": "NO_GO"
+      },
+      {
+        "id": "GATE-4",
+        "condition": "changeRiskLevel is 'high' AND insufficientCoverageRule evaluates to true.",
+        "decision": "CONDITIONAL"
+      },
+      {
+        "id": "GATE-5",
+        "condition": "None of the above conditions are met.",
+        "decision": "GO"
+      }
+    ]
+  }
+}

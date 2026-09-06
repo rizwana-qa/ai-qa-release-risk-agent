@@ -1,0 +1,78 @@
+{
+  "schemaVersion": "1.0",
+  "synthetic": true,
+  "disclaimer": "Synthetic, illustrative data created for a personal portfolio project. Contains no real company, customer, banking, or production information.",
+  "servedByTool": "get_requirement",
+  "requirement": {
+    "requirementId": "REQ-BEN-001",
+    "title": "Add a beneficiary and allow an authenticated customer to transfer money to the beneficiary after authentication",
+    "description": "As an authenticated customer, I want to add a beneficiary and then transfer money to that beneficiary so that I can send funds to people and organisations I trust. Adding a beneficiary and initiating a transfer both require the customer to be authenticated; adding a beneficiary additionally requires a successful step-up authentication challenge. All beneficiary and transfer input is validated, and a customer may only view and transfer to beneficiaries they own.",
+    "criticality": "critical",
+    "affectedAreas": [
+      "authentication",
+      "beneficiary-management",
+      "money-transfer",
+      "authorization",
+      "security",
+      "validation"
+    ],
+    "securitySensitive": true,
+    "acceptanceCriteria": [
+      {
+        "id": "AC-1",
+        "area": "beneficiary-management",
+        "critical": false,
+        "text": "An authenticated customer can add a new beneficiary with valid details, and the beneficiary is persisted to that customer's beneficiary list."
+      },
+      {
+        "id": "AC-2",
+        "area": "authentication",
+        "critical": true,
+        "text": "Adding a beneficiary requires a successful step-up authentication challenge (synthetic one-time code); if the challenge fails, the beneficiary is not added."
+      },
+      {
+        "id": "AC-3",
+        "area": "validation",
+        "critical": false,
+        "text": "Beneficiary input (display name, account identifier, currency) is validated before persistence; invalid or incomplete input is rejected with an error."
+      },
+      {
+        "id": "AC-4",
+        "area": "authorization",
+        "critical": true,
+        "text": "A customer can only view, edit, and transfer to beneficiaries they own; attempts to access another customer's beneficiary are denied."
+      },
+      {
+        "id": "AC-5",
+        "area": "money-transfer",
+        "critical": true,
+        "text": "An authenticated customer can transfer money to an existing beneficiary they own; a successful transfer records a debit against the customer and a corresponding transfer record."
+      },
+      {
+        "id": "AC-6",
+        "area": "authentication",
+        "critical": true,
+        "text": "A transfer is rejected if the customer's session is missing, expired, or authentication otherwise fails; no funds move in that case."
+      },
+      {
+        "id": "AC-7",
+        "area": "validation",
+        "critical": false,
+        "text": "A transfer amount must be a positive value, must not exceed the configured per-transaction limit, and must not exceed the customer's available balance; otherwise the transfer is rejected."
+      },
+      {
+        "id": "AC-8",
+        "area": "security",
+        "critical": true,
+        "text": "Sensitive values (credentials, step-up one-time codes, and full account identifiers) are never returned in API responses and never written to application logs."
+      }
+    ],
+    "illustrativeValues": {
+      "perTransactionLimit": {
+        "amount": 10000,
+        "currency": "XTS",
+        "note": "Synthetic illustrative value only. XTS is the ISO 4217 code reserved for testing. Not a real limit or policy."
+      }
+    }
+  }
+}

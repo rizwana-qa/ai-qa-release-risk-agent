@@ -1,0 +1,108 @@
+{
+  "name": "AI QA Release Risk Assessment (synthetic REQ-BEN-001)",
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "description": "Orchestration only. Each node shells out to src/pipelineCli.ts, which delegates to the existing Phase 2-5 components. No QA risk rules and no release-decision rules are defined in this workflow. The Phase 3 deterministic release gate is the sole decision authority. Run n8n with the repository root as the working directory. Optional environment (never stored here): GEMINI_API_KEY for the live Gemini step, or PIPELINE_AGENT_FINDINGS_FILE=./workflows/sample-agent-findings.json for an offline demo run."
+  },
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [0, 300],
+      "notes": "Start a single assessment run for the one synthetic scenario."
+    },
+    {
+      "parameters": {
+        "command": "node src/pipelineCli.ts fetch-data --state ./.pipeline-run/state.json"
+      },
+      "id": "node-fetch-data",
+      "name": "Retrieve QA Data (MCP)",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Phase 4: calls the four read-only MCP tools (get_requirement, get_existing_tests, get_known_defects, get_risk_rules) via src/mcpServer.ts."
+    },
+    {
+      "parameters": {
+        "command": "node src/pipelineCli.ts analyze --state ./.pipeline-run/state.json"
+      },
+      "id": "node-analyze",
+      "name": "AI Reasoning",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [480, 300],
+      "notes": "Phase 5: Gemini 3.6 Flash performs the 7 analysis steps and returns structured findings + a human-readable explanation. It does NOT decide the release. Uses GEMINI_API_KEY, or PIPELINE_AGENT_FINDINGS_FILE for an offline recorded-output run."
+    },
+    {
+      "parameters": {
+        "command": "node src/pipelineCli.ts validate --state ./.pipeline-run/state.json"
+      },
+      "id": "node-validate",
+      "name": "Validate Structured Findings",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [720, 300],
+      "notes": "Phase 5: validateAgentFindings() — rejects malformed / incomplete output and any LLM-supplied decision field. Failure here makes the gate fail safe."
+    },
+    {
+      "parameters": {
+        "command": "node src/pipelineCli.ts adapt --state ./.pipeline-run/state.json"
+      },
+      "id": "node-adapt",
+      "name": "Deterministic Adapter",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [960, 300],
+      "notes": "Phase 5: adaptAgentFindingsToReleaseFindings() — builds the Phase 3 release-findings object from authoritative dataset facts plus the deterministic security-severity projection; grounding checks fail safe."
+    },
+    {
+      "parameters": {
+        "command": "node src/pipelineCli.ts gate --state ./.pipeline-run/state.json"
+      },
+      "id": "node-gate",
+      "name": "Deterministic Release Gate",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1200, 300],
+      "notes": "Phase 3: the ONLY step that produces a decision. Runs the deterministic release gate; no decision rules are defined here or anywhere in this workflow."
+    },
+    {
+      "parameters": {
+        "command": "node src/pipelineCli.ts assemble --state ./.pipeline-run/state.json"
+      },
+      "id": "node-assemble",
+      "name": "Assemble Release Report",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [1440, 300],
+      "notes": "Copies fields into the final report: release decision, fired rule, reasons (from the gate step verbatim), plus AI explanation, identified risks, coverage assessment, regression priorities, and the pipeline trace."
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{ "node": "Retrieve QA Data (MCP)", "type": "main", "index": 0 }]]
+    },
+    "Retrieve QA Data (MCP)": {
+      "main": [[{ "node": "AI Reasoning", "type": "main", "index": 0 }]]
+    },
+    "AI Reasoning": {
+      "main": [[{ "node": "Validate Structured Findings", "type": "main", "index": 0 }]]
+    },
+    "Validate Structured Findings": {
+      "main": [[{ "node": "Deterministic Adapter", "type": "main", "index": 0 }]]
+    },
+    "Deterministic Adapter": {
+      "main": [[{ "node": "Deterministic Release Gate", "type": "main", "index": 0 }]]
+    },
+    "Deterministic Release Gate": {
+      "main": [[{ "node": "Assemble Release Report", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {}
+}
