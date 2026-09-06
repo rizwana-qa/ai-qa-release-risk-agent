@@ -29,7 +29,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      testIgnore: /linkedin-demo\.spec\.ts/,
+      testIgnore: /linkedin-demo\.spec\.ts|portfolio-demo-30s\.spec\.ts/,
       use: { ...devices["Desktop Chrome"] },
     },
     {

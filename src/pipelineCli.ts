@@ -46,7 +46,7 @@ interface TraceEntry {
 }
 
 interface PipelineState {
-  scenario: "REQ-BEN-001";
+  scenario: string;
   datasets?: FetchedDatasets;
   agentRaw?: unknown;
   agentValidation?: { ok: boolean; problems?: string[] };
@@ -78,8 +78,8 @@ export interface ReleaseReport {
 
 /* ------------------------------- state io -------------------------------- */
 
-function emptyState(): PipelineState {
-  return { scenario: "REQ-BEN-001", trace: [] };
+function emptyState(scenario: string = "REQ-BEN-001"): PipelineState {
+  return { scenario, trace: [] };
 }
 
 function readState(file: string): PipelineState {
@@ -229,6 +229,8 @@ export interface RunPipelineOptions {
   stateFile?: string;
   analyze?: AnalyzeFn;
   fetchDatasets?: () => Promise<FetchedDatasets>;
+  /** Scenario/requirement id to report. Defaults to the fixed "REQ-BEN-001" fixture. */
+  scenario?: string;
 }
 
 /** Run all six steps in order (used by `pipeline run` and by tests). */
@@ -237,7 +239,7 @@ export async function runPipeline(options: RunPipelineOptions = {}): Promise<Rel
   const analyze = resolveAnalyze(options.analyze);
   const fetchDatasets = options.fetchDatasets ?? fetchDatasetsViaMcp;
 
-  const state = emptyState();
+  const state = emptyState(options.scenario);
   await stepFetchData(state, fetchDatasets);
   await stepAnalyze(state, analyze);
   stepValidate(state);

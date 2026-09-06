@@ -137,13 +137,24 @@ async function submitCustom() {
     });
     return;
   }
-  if (prep.status !== 200 || !prep.body?.runId) {
+  if (prep.status !== 200 || !(prep.body?.runId || prep.body?.report)) {
     toError(prep.body?.error || `Unexpected response (${prep.status}).`);
     return;
   }
 
   app.lastRun = { kind: "custom", payload };
   toProcessing(CUSTOM_STAGES);
+
+  // A deployment with no SSE route (e.g. Vercel) returns the full result
+  // directly from this same request instead of a runId to stream — same
+  // backend logic, just no separate stream round trip. Local/Render are
+  // unaffected: their prepare response never carries `report`.
+  if (prep.body.report) {
+    for (const s of app.stages) s.status = "done";
+    finishCustom(prep.body);
+    return;
+  }
+
   streamCustom(prep.body.runId);
 }
 
@@ -243,7 +254,10 @@ async function runDemo() {
   toProcessing(stageDefs.length ? stageDefs : CUSTOM_STAGES);
 
   const url = "/api/assess/stream?id=REQ-BEN-001";
-  if (typeof EventSource !== "function") {
+  // A deployment with no SSE route (e.g. Vercel) signals this via
+  // meta.streaming === false; fall back to the existing blocking call
+  // instead of opening an EventSource that has nothing to connect to.
+  if (typeof EventSource !== "function" || meta.streaming === false) {
     try {
       const assess = await fetchJson("/api/assess?id=REQ-BEN-001", { method: "POST" });
       for (const s of app.stages) s.status = "done";

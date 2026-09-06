@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/vercel/health.ts", "use": "@vercel/node" },
+    { "src": "api/vercel/meta.ts", "use": "@vercel/node" },
+    { "src": "api/vercel/scenarios.ts", "use": "@vercel/node" },
+    { "src": "api/vercel/scenario.ts", "use": "@vercel/node" },
+    { "src": "api/vercel/assess.ts", "use": "@vercel/node" },
+    { "src": "api/vercel/assess-custom.ts", "use": "@vercel/node" },
+    { "src": "web/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "^/api/health$", "dest": "/api/vercel/health.ts" },
+    { "src": "^/api/meta$", "dest": "/api/vercel/meta.ts" },
+    { "src": "^/api/scenarios$", "dest": "/api/vercel/scenarios.ts" },
+    { "src": "^/api/scenario$", "dest": "/api/vercel/scenario.ts" },
+    { "src": "^/api/assess/custom$", "dest": "/api/vercel/assess-custom.ts" },
+    { "src": "^/api/assess$", "dest": "/api/vercel/assess.ts" },
+    { "src": "^/$", "dest": "/web/index.html" },
+    { "src": "^/(.*)$", "dest": "/web/$1" }
+  ]
+}
