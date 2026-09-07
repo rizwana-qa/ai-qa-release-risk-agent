@@ -134,6 +134,7 @@ export function reportView(result) {
       <div>
         <span class="eyebrow">Release risk report</span>
         <h1>${esc(ctx.releaseName || ctx.userStory || report.scenario || "Release assessment")}</h1>
+        <p class="report__subtitle">AI-assisted risk analysis with a deterministic release-gate decision.</p>
       </div>
       <div class="report__actions">
         <button class="btn btn--ghost btn--sm" type="button" data-act="print">${ICONS.file} Print / PDF</button>
@@ -146,9 +147,9 @@ export function reportView(result) {
 
 /* ---- executive grid ---- */
 
-function metric(label, value, cls, hint) {
+function metric(label, value, cls, hint, icon) {
   return `<div class="metric metric--${cls}">
-    <span class="metric__label">${esc(label)}</span>
+    <span class="metric__label">${icon ? `<span class="metric__icon">${icon}</span>` : ""}${esc(label)}</span>
     <span class="metric__value">${esc(value)}</span>
     ${hint ? `<span class="metric__hint">${esc(hint)}</span>` : ""}
   </div>`;
@@ -183,9 +184,9 @@ function execGrid(report, summary, cov, decision) {
         <p class="decision-box__note">${esc(firstReason)}</p>
       </div>
     </div>
-    ${metric("Change risk", cr ? upper(cr) : "N/A", crCls, "Highest-risk area affected")}
-    ${metric("Test coverage", tc ? upper(tc) : "N/A", tcCls, covHint)}
-    ${metric("Security risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : "N/A", secCls, "Security failure check")}
+    ${metric("Change risk", cr ? upper(cr) : "N/A", crCls, "Highest-risk area affected", ICONS.gauge)}
+    ${metric("Test coverage", tc ? upper(tc) : "N/A", tcCls, covHint, ICONS.shield)}
+    ${metric("Security risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : "N/A", secCls, "Security failure check", ICONS.lock)}
   </div>`;
 }
 
@@ -378,7 +379,7 @@ function aiAnalysisAccordion(report) {
       ? `<p class="hint">${riskCount} identified risk${riskCount === 1 ? "" : "s"}. See Risk Signals above for the itemized list.</p>`
       : `<p class="muted">No risks were identified from the submitted evidence.</p>`}`;
 
-  return accordion("ai", { icon: ICONS.sparkle, title: "AI Analysis · Advisory", meta: `<span class="lane lane--ai">Advisory</span>`, open: true, ai: true }, body);
+  return accordion("ai", { icon: ICONS.sparkle, title: "AI Risk Intelligence", meta: `<span class="lane lane--ai">Advisory</span>`, open: true, ai: true }, body);
 }
 
 /* ---- test coverage ---- */

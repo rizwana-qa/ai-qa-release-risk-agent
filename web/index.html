@@ -17,39 +17,43 @@
   <body>
     <div class="app">
       <aside class="sidebar">
-        <div class="topbar__brand">
-          <span class="topbar__mark" aria-hidden="true"></span>
-          <span class="topbar__names">
-            <span class="topbar__product">AI QA Release Risk &amp; Test Strategy</span>
-            <span class="topbar__kicker">Release Risk Workspace</span>
-          </span>
-        </div>
+        <div class="sidebar__section-label">Release Risk Workspace</div>
 
         <nav class="flow" id="topbar-steps" aria-label="Workflow steps">
           <button type="button" class="flow__step" data-step="context">
             <span class="flow__num"><span class="flow__digits">01</span></span>
-            <span class="flow__label">Context</span>
-            <span class="flow__state"></span>
+            <span class="flow__text">
+              <span class="flow__toprow"><span class="flow__label">Context</span><span class="flow__state"></span></span>
+              <span class="flow__desc">Scope &amp; metadata</span>
+            </span>
           </button>
           <button type="button" class="flow__step" data-step="evidence">
             <span class="flow__num"><span class="flow__digits">02</span></span>
-            <span class="flow__label">Evidence</span>
-            <span class="flow__state"></span>
+            <span class="flow__text">
+              <span class="flow__toprow"><span class="flow__label">Evidence</span><span class="flow__state"></span></span>
+              <span class="flow__desc">Tests &amp; known defects</span>
+            </span>
           </button>
           <button type="button" class="flow__step" data-step="analyze">
             <span class="flow__num"><span class="flow__digits">03</span></span>
-            <span class="flow__label">Analyze</span>
-            <span class="flow__state"></span>
+            <span class="flow__text">
+              <span class="flow__toprow"><span class="flow__label">Analyze</span><span class="flow__state"></span></span>
+              <span class="flow__desc">AI risk analysis</span>
+            </span>
           </button>
           <button type="button" class="flow__step" data-step="review">
             <span class="flow__num"><span class="flow__digits">04</span></span>
-            <span class="flow__label">Review</span>
-            <span class="flow__state"></span>
+            <span class="flow__text">
+              <span class="flow__toprow"><span class="flow__label">Review</span><span class="flow__state"></span></span>
+              <span class="flow__desc">Findings &amp; risk signals</span>
+            </span>
           </button>
           <button type="button" class="flow__step" data-step="decision">
             <span class="flow__num"><span class="flow__digits">05</span></span>
-            <span class="flow__label">Decision</span>
-            <span class="flow__state"></span>
+            <span class="flow__text">
+              <span class="flow__toprow"><span class="flow__label">Decision</span><span class="flow__state"></span></span>
+              <span class="flow__desc">Release decision</span>
+            </span>
           </button>
           <span class="flow__compact" aria-hidden="true">
             <span class="flow__compact-label"></span>
@@ -62,6 +66,13 @@
       <div class="shell-main">
         <header class="topbar">
           <div class="container topbar__inner">
+            <div class="topbar__brand">
+              <span class="topbar__mark" aria-hidden="true"></span>
+              <span class="topbar__names">
+                <span class="topbar__product">AI QA Release Risk &amp; Test Strategy</span>
+                <span class="topbar__kicker">Release Risk Workspace</span>
+              </span>
+            </div>
             <span class="topbar__spacer"></span>
 
             <button

@@ -9,6 +9,7 @@ export const ICONS = {
   x: s('<path d="M18 6 6 18M6 6l12 12"/>'),
   alert: s('<path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>'),
   shield: s('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>'),
+  lock: s('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>'),
   scale: s('<path d="M12 3v18M7 21h10M5 7h14M5 7 3 13a3 3 0 0 0 6 0Zm14 0-2 6a3 3 0 0 0 6 0Z"/>'),
   cpu: s('<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v2m6-2v2M9 20v2m6-2v2M2 9h2m-2 6h2m16-6h2m-2 6h2"/>'),
   chevron: s('<path d="m6 9 6 6 6-6"/>'),

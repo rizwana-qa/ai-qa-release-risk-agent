@@ -122,7 +122,10 @@ svg{display:block;}
   padding:18px 14px;
   gap:20px;
 }
-.sidebar .topbar__brand{padding:2px 4px 0;}
+.sidebar__section-label{
+  font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);
+  padding:2px 4px 0;
+}
 .sidebar__foot{
   margin-top:auto;border-top:1px solid var(--border);padding-top:12px;
   display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text-3);
@@ -195,8 +198,11 @@ svg{display:block;}
   background:var(--surface-secondary);border:1px solid var(--border);
   font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--text-3);
 }
+.flow__text{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;}
+.flow__toprow{display:flex;align-items:center;gap:8px;}
 .flow__label{font-size:13px;font-weight:500;}
 .flow__state{margin-left:auto;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);}
+.flow__desc{font-size:11px;color:var(--text-3);}
 
 .flow__step[data-state="current"]{
   background:var(--cobalt-tint);color:var(--text-1);
@@ -208,6 +214,12 @@ svg{display:block;}
 .flow__step[data-state="complete"]{color:var(--text-2);}
 .flow__step[data-state="complete"] .flow__num{background:var(--emerald-tint);border-color:rgba(45,212,168,.35);color:var(--emerald);}
 .flow__step[data-state="complete"] .flow__state{color:var(--emerald);}
+.flow__step[data-state="complete"] .flow__digits{display:none;}
+.flow__step[data-state="complete"] .flow__num::after{
+  content:"";display:block;width:9px;height:5px;
+  border-left:2px solid var(--emerald);border-bottom:2px solid var(--emerald);
+  transform:rotate(-45deg) translate(1px,-1px);
+}
 
 .flow__step[data-state="available"]{color:var(--text-2);}
 .flow__step[data-state="available"] .flow__num{border-color:#2a4d72;color:var(--text-2);}
@@ -336,7 +348,9 @@ svg{display:block;}
   background:var(--surface-elevated);border:1px solid var(--border);border-radius:var(--r-md);
   padding:14px 16px;display:flex;flex-direction:column;gap:4px;
 }
-.metric__label{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-3);}
+.metric__label{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-3);display:inline-flex;align-items:center;gap:6px;}
+.metric__icon{width:13px;height:13px;flex:none;display:inline-flex;}
+.metric__icon svg{width:13px;height:13px;}
 .metric__value{font-family:var(--font-mono);font-size:19px;font-weight:600;letter-spacing:-.01em;}
 .metric__hint{font-size:11px;color:var(--text-3);}
 .metric--ok .metric__value{color:var(--emerald);}
@@ -541,6 +555,7 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
 
 .report__head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px;}
 .report__head h1{font-size:22px;font-weight:700;max-width:60ch;}
+.report__subtitle{font-size:13px;color:var(--text-2);margin-top:6px;max-width:60ch;}
 .report__actions{display:flex;gap:8px;flex:none;}
 
 /* ---------------------------- processing view --------------------------------- */
@@ -758,7 +773,73 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
     display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
     color:var(--cobalt);margin-bottom:10px;
   }
-  .card__head, .acc__head{border-bottom:2px solid var(--cobalt-tint);}
+  .card__head, .acc__head{border-bottom:2px solid #94A3B8;}
+
+  /* Every one of these borders is written as a low-alpha rgba() tuned to
+     glow softly against the dark navy screen background. Composited over
+     white instead, that same alpha washes out to a barely-visible pale
+     tint -- exactly the "blurry/transparent border" problem. Converting
+     each to the same token at full, solid opacity keeps every severity/
+     status color exactly consistent with its screen meaning, just crisp
+     on paper. Scoped to the handful of selectors that actually render
+     inside the printed report (badges, banners, lane tags, decision-trace
+     dots, the final-decision bar) -- live-UI-only elements untouched. */
+  .b-low, .b-cov{border-color:var(--emerald);}
+  .b-medium{border-color:var(--amber);}
+  .b-high, .b-notcov, .b-critical{border-color:var(--coral);}
+  .b-security{border-color:var(--indigo);}
+  .lane--ai{border-color:var(--indigo);}
+  .lane--gate{border-color:var(--cobalt);}
+  .mini-card--flag{border-color:var(--coral);}
+  .banner{border-color:var(--coral);}
+  .banner--warn{border-color:var(--amber);}
+  .banner--info{border-color:var(--cobalt);}
+  .tdot--ai{border-color:var(--indigo);}
+  .tdot--gate{border-color:var(--cobalt);}
+  .tdot--ok{border-color:var(--emerald);}
+  .tdot--fail{border-color:var(--coral);}
+  .tfinal.d-go{border-color:var(--emerald);}
+  .tfinal.d-no-go{border-color:var(--coral);}
+  .tfinal.d-conditional{border-color:var(--amber);}
+  .tablewrap{border-color:#94A3B8;}
+
+  /* Table headers read as merely outlined (light-gray fill, slate text) --
+     a filled dark-navy header with white text is the one place this report
+     borrows the web app's own navy fill deliberately, and it applies to
+     every table.data instance uniformly (coverage, defects, regression,
+     provenance, pipeline trace) since they all share this one selector. */
+  table.data th{background:#0B2233;color:#ffffff;border-bottom-color:#0B2233;}
+
+  /* Print-specific type scale -- a screen-optimized 13.5-15px section title
+     reads fine on a backlit display at arm's length but is small on a
+     printed page. Bumping just these three for print only. */
+  .report__head h1{font-size:28px;}
+  .card__head h2, .acc__head h3{font-size:18px;}
+  .decision-box__value{font-size:34px;}
+
+  /* Print-only executive reading order: Decision/KPIs -> Risk -> Release
+     Readiness (decision + evidence + why + actions) -> AI risk narrative ->
+     supporting evidence tables -> methodology -> appendix. This is a pure
+     re-sequencing of the exact same sections already in the DOM (no content
+     added, removed or duplicated) -- .report only becomes a flex column
+     here, inside @media print, so the on-screen interactive order is
+     completely unaffected. */
+  .report{display:flex;flex-direction:column;}
+  .report__head{order:1;}
+  .report > .banner{order:2;}
+  .report > .exec-grid{order:3;}
+  .report > .card--risksig{order:4;}
+  .report > .card--gate{order:5;}
+  .report > .acc[data-acc="risky"]{order:6;}
+  .report > .acc[data-acc="coverage"]{order:7;}
+  .report > .acc[data-acc="defects"]{order:8;}
+  .report > .acc[data-acc="regression"]{order:9;}
+  .report > .acc[data-acc="missing"]{order:10;}
+  .report > .acc[data-acc="ai"]{order:11;}
+  .report > section.card.card--ai:not(.acc){order:12;}
+  .report > .hist-empty{order:13;}
+  .report > .acc[data-acc="trace"]{order:14;}
+  .report > .acc[data-acc="technical"]{order:15;}
 }
 
 /* ---------------------------- responsive ---------------------------------------- */
@@ -774,8 +855,7 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
 @media (max-width:960px){
   :root{--sidebar-w:64px;}
   .sidebar{align-items:center;padding:16px 8px;}
-  .topbar__names, .flow__label, .flow__state{display:none;}
-  .topbar__brand{justify-content:center;}
+  .topbar__names, .flow__label, .flow__state, .flow__desc{display:none;}
   .flow__step{justify-content:center;padding:8px;}
   .grid-2{grid-template-columns:1fr;}
   .stats, .mini-cards, .evstats{grid-template-columns:repeat(2,1fr);}
