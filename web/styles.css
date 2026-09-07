@@ -771,4 +771,19 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
   .kv dt{margin-top:8px;}
   .report__head{flex-direction:column;}
   .decision-box{flex-direction:column;align-items:flex-start;text-align:left;}
+
+  /* table.data relies on horizontal scroll (.tablewrap{overflow-x:auto}) at
+     desktop widths, but that leaves the Detail/Value columns hidden behind a
+     swipe by default on a phone — stack each row into label:value blocks
+     instead, using the data-label each <td> already carries. */
+  table.data, table.data thead, table.data tbody, table.data tr, table.data th, table.data td{display:block;}
+  table.data thead{display:none;}
+  .tablewrap{overflow-x:visible;}
+  table.data tr{padding:11px 14px;border-bottom:1px solid var(--border-soft);}
+  table.data tr:last-child{border-bottom:none;}
+  table.data td{padding:4px 0;border-bottom:none;white-space:normal;}
+  table.data td[data-label]::before{
+    content:attr(data-label);display:block;font-size:10px;font-weight:700;
+    letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);margin-bottom:2px;
+  }
 }

@@ -404,10 +404,10 @@ function coverageAccordion(report, summary, cov, ctx) {
       : `<span class="muted">none</span>`;
     const note = aiNote.get(c.id);
     return `<tr class="${flagged ? "flagged" : ""}">
-      <td><span class="mono">${esc(c.id)}</span>${c.critical ? " " + badge("Critical", "b-high") : ""}<div class="muted ac-text subtext">${acText.get(c.id) ? formatFreeText(acText.get(c.id)) : ""}</div></td>
-      <td>${badge(upper(c.coverage), coverageClass(c.coverage))}${note ? `<div class="muted subtext">${formatFreeText(note)}</div>` : ""}</td>
-      <td>${chips}</td>
-      <td>${badge(risk[0], risk[1])}</td>
+      <td data-label="Criterion"><span class="mono">${esc(c.id)}</span>${c.critical ? " " + badge("Critical", "b-high") : ""}<div class="muted ac-text subtext">${acText.get(c.id) ? formatFreeText(acText.get(c.id)) : ""}</div></td>
+      <td data-label="Coverage">${badge(upper(c.coverage), coverageClass(c.coverage))}${note ? `<div class="muted subtext">${formatFreeText(note)}</div>` : ""}</td>
+      <td data-label="Related tests">${chips}</td>
+      <td data-label="Risk">${badge(risk[0], risk[1])}</td>
     </tr>`;
   }).join("");
 
@@ -471,12 +471,12 @@ function defectsAccordion(report, ctx) {
     const rev = reviewById.get(d.id);
     const flagged = reasonsText.includes(d.id);
     return `<tr class="${flagged ? "flagged" : ""}">
-      <td><span class="mono">${esc(d.label || d.id)}</span></td>
-      <td>${badge(upper(d.severity), severityClass(d.severity))}</td>
-      <td>${badge(upper(d.status), d.status === "open" ? "b-medium" : "b-low")}</td>
-      <td>${d.security ? badge("Security", "b-security") : `<span class="muted">No</span>`}</td>
-      <td>${esc(displayArea(d.area))}</td>
-      <td>${rev ? `${rev.stillRelevant ? badge("Relevant", "b-high") : badge("Not relevant", "b-neutral")} <div class="muted subtext">${formatFreeText(rev.notes || "")}</div>` : `<span class="muted">${formatFreeText(d.description)}</span>`}</td>
+      <td data-label="Defect"><span class="mono">${esc(d.label || d.id)}</span></td>
+      <td data-label="Severity">${badge(upper(d.severity), severityClass(d.severity))}</td>
+      <td data-label="Status">${badge(upper(d.status), d.status === "open" ? "b-medium" : "b-low")}</td>
+      <td data-label="Security">${d.security ? badge("Security", "b-security") : `<span class="muted">No</span>`}</td>
+      <td data-label="Related area">${esc(displayArea(d.area))}</td>
+      <td data-label="Release impact">${rev ? `${rev.stillRelevant ? badge("Relevant", "b-high") : badge("Not relevant", "b-neutral")} <div class="muted subtext">${formatFreeText(rev.notes || "")}</div>` : `<span class="muted">${formatFreeText(d.description)}</span>`}</td>
     </tr>`;
   }).join("");
 
@@ -495,9 +495,9 @@ function regressionAccordion(report) {
   }
   const order = { high: 0, medium: 1, low: 2 };
   const rows = [...list].sort((a, b) => (order[a.priority] ?? 3) - (order[b.priority] ?? 3)).map((p) => `<tr>
-    <td>${badge(upper(p.priority), priorityClass(p.priority))}</td>
-    <td>${esc(displayArea(p.area))}</td>
-    <td>${formatFreeText(p.rationale || "")}</td>
+    <td data-label="Priority">${badge(upper(p.priority), priorityClass(p.priority))}</td>
+    <td data-label="Area">${esc(displayArea(p.area))}</td>
+    <td data-label="Reason">${formatFreeText(p.rationale || "")}</td>
   </tr>`).join("");
   return accordion("regression", { icon: ICONS.route, title: "Regression priorities", meta: badge(String(list.length), "b-neutral") },
     tableWrap(`<tr><th>Priority</th><th>Area</th><th>Reason</th></tr>`, rows));
@@ -570,13 +570,13 @@ function technicalAccordion(result, report, meta, mode) {
     : "QA analysis mode: Rules based";
   const prov = report.dataProvenance || result?.provenance || {};
   const provRows = Object.keys(prov).length
-    ? Object.entries(prov).map(([k, v]) => `<tr><td class="mono">${esc(k)}</td><td>${esc(String(v))}</td></tr>`).join("")
+    ? Object.entries(prov).map(([k, v]) => `<tr><td class="mono" data-label="Key">${esc(k)}</td><td data-label="Value">${esc(String(v))}</td></tr>`).join("")
     : `<tr><td colspan="2" class="muted">No provenance.</td></tr>`;
 
   const traceRows = (report.pipelineTrace || []).map((t) => `<tr>
-    <td class="mono">${esc(t.step)}</td>
-    <td>${t.ok === false ? badge("FAIL", "b-high") : badge("OK", "b-low")}</td>
-    <td class="muted">${esc(formatTraceDetail(t.detail || ""))}</td>
+    <td class="mono" data-label="Step">${esc(t.step)}</td>
+    <td data-label="Result">${t.ok === false ? badge("FAIL", "b-high") : badge("OK", "b-low")}</td>
+    <td class="muted" data-label="Detail">${esc(formatTraceDetail(t.detail || ""))}</td>
   </tr>`).join("") || `<tr><td colspan="3" class="muted">No trace.</td></tr>`;
 
   const chipRow = (list) => `<div class="chips">${(list || []).map((s) => badge(String(s), "b-neutral")).join("")}</div>`;
