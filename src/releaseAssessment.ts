@@ -112,7 +112,7 @@ export async function runReleaseAssessment(options: RunOptions): Promise<Release
   // 3. Validate the raw agent output.
   const validation = validateAgentFindings(rawAgentOutput);
   if (!validation.ok) {
-    pipeline.push({ step: "validate-agent-output", ok: false, detail: `${validation.problems.length} problem(s)` });
+    pipeline.push({ step: "validate-agent-output", ok: false, detail: `${validation.problems.length} ${validation.problems.length === 1 ? "problem" : "problems"}` });
     return failSafe(pipeline, validation.problems.map((p) => `validate-agent-output: ${p}`), null);
   }
   pipeline.push({ step: "validate-agent-output", ok: true });
@@ -121,7 +121,7 @@ export async function runReleaseAssessment(options: RunOptions): Promise<Release
   // 4. Deterministic adapter -> ReleaseFindings.
   const adapted = adaptAgentFindingsToReleaseFindings(findings, datasets);
   if (!adapted.ok) {
-    pipeline.push({ step: "adapt-findings", ok: false, detail: `${adapted.problems.length} problem(s)` });
+    pipeline.push({ step: "adapt-findings", ok: false, detail: `${adapted.problems.length} ${adapted.problems.length === 1 ? "problem" : "problems"}` });
     return failSafe(pipeline, adapted.problems.map((p) => `adapt-findings: ${p}`), findings);
   }
   pipeline.push({ step: "adapt-findings", ok: true });

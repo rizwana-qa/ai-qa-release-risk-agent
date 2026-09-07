@@ -1,11 +1,11 @@
 {
   "scenario": "REQ-BEN-001",
-  "decisionAuthority": "evaluateReleaseGate() (deterministic) — the AI agent explains the risk, it does not decide",
+  "decisionAuthority": "evaluateReleaseGate() (deterministic). The AI agent explains the risk. It does not decide.",
   "releaseDecision": "NO_GO",
   "firedRule": "GATE-2",
   "reasons": [
     "GATE-2: security failure.",
-    "SEC-1: open security-flagged defect(s) at qualifying severity: DEF-004.",
+    "SEC-1: open security-flagged defect at qualifying severity: DEF-004.",
     "SEC-2: security acceptance criteria without active coverage: AC-8."
   ],
   "aiQaExplanation": "The change spans authentication, authorization, money movement and security. Coverage is broadly present, but the security acceptance criterion (AC-8) has no active test and an open security defect (DEF-004) affects step-up authentication. Regression testing should concentrate on transfers and authentication paths.",

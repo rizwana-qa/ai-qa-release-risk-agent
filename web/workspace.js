@@ -42,12 +42,18 @@ function freshState() {
     validation: null, // { missing:[], problems:[] }
     uploadError: "",
     busy: false,
+    // True only for data loaded verbatim from a demo/regression scenario, not
+    // yet touched by the user. The first edit clears it (see bind()), so an
+    // edited demo submission is always treated as the user's own evidence,
+    // never silently re-run against the fixture's canonical dataset.
+    demoLoaded: false,
   };
 }
 
 let state = freshState();
 let root = null;
 let onAnalyze = () => {};
+let onStateChange = () => {};
 
 /* --------------------------------- example -------------------------------- */
 
@@ -81,6 +87,49 @@ function exampleState() {
     { label: "DEF-77", severity: "high", status: "open", area: "checkout", security: false, description: "Fallback message not shown when the vault call times out (only on slow connections).", relatedAcs: ["AC4"] },
   ];
   return s;
+}
+
+/**
+ * Populate the workspace from a real, already-fetched scenario's context
+ * (same shape produced by app.js from /api/scenario) — the demo/regression
+ * fixture path renders through this exact form, same as manual entry, rather
+ * than bypassing it. Marked demoLoaded until the user edits anything.
+ */
+export function loadScenario(ctx) {
+  const s = freshState();
+  s.releaseName = ctx.releaseName || "";
+  s.releaseScope = ctx.releaseScope || "";
+  s.userStory = ctx.userStory || "";
+  s.criticality = CRITICALITY.includes(ctx.criticality) ? ctx.criticality : "high";
+  s.acceptanceCriteria = (ctx.acceptanceCriteria || []).map((a) => ({
+    area: a.area || "", critical: !!a.critical, text: a.text || "",
+  }));
+  if (!s.acceptanceCriteria.length) s.acceptanceCriteria = [blankAc()];
+  s.businessRules = (ctx.businessRules || []).map((b) => ({ text: b.text || "" }));
+  s.testCases = (ctx.testCases || []).map((t) => ({
+    label: t.label || "", title: t.title || "", area: t.area || "",
+    testType: TEST_TYPES.includes(t.testType) ? t.testType : "integration",
+    status: TEST_STATUS.includes(t.status) ? t.status : (t.statusRaw || "not-run"),
+    covers: t.covers || [],
+  }));
+  s.knownDefects = (ctx.defects || []).map((d) => ({
+    label: d.label || d.id || "", severity: SEVERITIES.includes(d.severity) ? d.severity : "medium",
+    status: DEFECT_STATUS.includes(d.status) ? d.status : "open", area: d.area || "",
+    security: !!d.security, description: d.description || "", relatedAcs: d.relatedAcs || [],
+  }));
+  s.demoLoaded = true;
+  state = s;
+  renderForm();
+}
+
+/** Real per-step workflow state for the sidebar (app.js), not decorative:
+ *  derived from the SAME rules canAnalyze()/sectionState() already use. */
+export function getWorkflowState() {
+  return {
+    contextComplete: sectionState("context").complete === true && sectionState("ac").complete === true,
+    canAnalyze: canAnalyze(),
+    demoLoaded: state.demoLoaded,
+  };
 }
 
 /* ------------------------------- DOM syncing ------------------------------ */
@@ -426,6 +475,52 @@ function previewBlock() {
   <p class="field__hint" style="margin-top:10px">Coverage percentages, risk levels and the release decision are computed by the backend QA rules, not here.</p>`;
 }
 
+/** Real, explicit "what's here / what's missing" for the Evidence step — never
+ * hides an absence, never invents a count. Shown once Context is valid. */
+function evidenceSummaryBlock() {
+  if (!sectionState("context").complete) return "";
+  const p = livePreview();
+  const docsN = state.supportingDocuments.length;
+  const executed = state.testCases.filter((t) => t.status !== "not-run" && (t.title.trim() || t.label.trim())).length;
+  const tile = (n, label, warn) => `<div class="stat${warn ? " stat--flag" : ""}"><div class="stat__n">${n}</div><div class="stat__t">${esc(label)}</div></div>`;
+  const noEvidence = p.totalTests === 0;
+  return `<div class="card card--evidence-status">
+    <div class="card__head"><span class="ico">${ICONS.clipboard}</span><h2>Evidence provided so far</h2></div>
+    <div class="card__body">
+      <div class="evstats">
+        ${tile(p.totalTests, "Test cases provided", p.totalTests === 0)}
+        ${tile(executed, "Execution results provided", executed === 0)}
+        ${tile(state.knownDefects.filter((d) => d.description.trim() || d.label.trim()).length, "Defects provided")}
+        ${tile(docsN, "Supporting documents provided")}
+      </div>
+      ${noEvidence
+        ? `<div class="banner banner--warn mt-3"><span class="ico">${ICONS.alert}</span>
+           <div><b>No test execution evidence has been provided.</b> This is not evidence of low risk. The assessment
+           will state that verification evidence is missing rather than assume the release is safe.</div></div>`
+        : `<p class="field__hint mt-3">Coverage percentages and the release decision are computed by the backend QA rules from exactly what's listed above.</p>`}
+    </div>
+  </div>`;
+}
+
+function continueToEvidenceBlock() {
+  const ready = sectionState("context").complete;
+  return `<div class="ws__continue" data-continue-block>
+    <button class="btn btn--ghost" type="button" data-act="continue-evidence" ${ready ? "" : "disabled"}>Continue to Evidence ${ICONS.chevron}</button>
+    <p class="field__hint" data-continue-hint ${ready ? "hidden" : ""}>${ICONS.info} Complete release scope, user story, and at least one acceptance criterion to continue to Evidence.</p>
+  </div>`;
+}
+
+function refreshContinueBlock() {
+  const wrap = root?.querySelector("[data-continue-block]");
+  if (!wrap) return;
+  const ready = sectionState("context").complete;
+  const btn = wrap.querySelector('[data-act="continue-evidence"]');
+  const hint = wrap.querySelector("[data-continue-hint]");
+  if (btn) btn.disabled = !ready;
+  if (hint) hint.hidden = ready;
+  wrap.classList.toggle("ws__continue--locked", !ready);
+}
+
 function formHtml() {
   const acs = state.acceptanceCriteria;
   return `
@@ -439,6 +534,7 @@ function formHtml() {
 
     ${validationBlock()}
 
+    <div id="ws-context-anchor"></div>
     <section class="card">
       <div class="card__head"><span class="step-badge">01</span><h2>Release context</h2>${sectionBadge("context")}</div>
       <div class="card__body">
@@ -479,6 +575,12 @@ function formHtml() {
       </div>
     </section>
 
+    ${continueToEvidenceBlock()}
+
+    <div id="ws-evidence-anchor"></div>
+    <p class="ws__stepback"><button class="linkbtn" type="button" data-act="back-to-context">← Back to Context</button></p>
+    ${evidenceSummaryBlock()}
+
     <section class="card">
       <div class="card__head"><span class="step-badge">02</span><h2>QA evidence · existing test cases</h2>${sectionBadge("tests")}</div>
       <div class="card__body">
@@ -515,6 +617,7 @@ function formHtml() {
     </section>
 
     <div class="ws__cta">
+      <p class="ws__stepback"><button class="linkbtn" type="button" data-act="back-to-evidence">← Back to Evidence</button></p>
       <button class="btn btn--primary btn--lg" type="button" data-act="analyze" ${canAnalyze() && !state.busy ? "" : "disabled"}>
         ${state.busy ? ICONS.spinner : ICONS.play} Analyze Release Risk
       </button>
@@ -551,10 +654,25 @@ function renderForm() {
   }
 }
 
+let lastContextComplete = null;
+
 function updateDerived() {
+  const contextComplete = sectionState("context").complete;
+  // The "Continue to Evidence" button and the Evidence-provided-so-far panel
+  // only exist in the DOM once Context becomes valid — a full re-render is
+  // needed exactly when that boolean flips (not on every keystroke).
+  if (lastContextComplete !== null && contextComplete !== lastContextComplete) {
+    lastContextComplete = contextComplete;
+    renderForm();
+    return;
+  }
+  lastContextComplete = contextComplete;
+
   const btn = root?.querySelector('[data-act="analyze"]');
   if (btn) btn.disabled = state.busy || !canAnalyze();
   refreshSectionBadges();
+  refreshContinueBlock();
+  onStateChange(getWorkflowState());
 }
 
 /* ----------------------------- event wiring --------------------------- */
@@ -626,6 +744,13 @@ function onClick(e) {
     case "doc-del": state.supportingDocuments.splice(idx, 1); break;
     case "load-example": state = exampleState(); break;
     case "clear": state = freshState(); break;
+    case "continue-evidence":
+    case "back-to-evidence":
+      root.querySelector("#ws-evidence-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    case "back-to-context":
+      root.querySelector("#ws-context-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
     case "pick-file": root.querySelector("[data-file-input]")?.click(); return;
     case "tpl-tc": downloadText("qa-test-cases-template.csv", TEMPLATES["qa-test-cases-template.csv"]); return;
     case "tpl-df": downloadText("qa-defects-template.csv", TEMPLATES["qa-defects-template.csv"]); return;
@@ -639,8 +764,15 @@ function onClick(e) {
 }
 
 function bind() {
-  root.addEventListener("input", () => { syncFromDom(); updateDerived(); });
+  // The first real edit after a demo/regression fixture load "graduates" the
+  // form to a normal user-authored submission — it must never be silently
+  // re-run against the fixture's own canonical dataset once the user has
+  // changed something the backend would otherwise ignore.
+  const clearDemoFlag = () => { if (state.demoLoaded) state.demoLoaded = false; };
+
+  root.addEventListener("input", () => { clearDemoFlag(); syncFromDom(); updateDerived(); });
   root.addEventListener("change", (e) => {
+    clearDemoFlag();
     // Some controls change how the form should *look* (covers chips, the defect
     // severity/status accents, the live evidence counts).
     // A full re-render is simplest and preserves focus + caret via renderForm().
@@ -714,6 +846,7 @@ document.addEventListener("click", (e) => {
 export function mountWorkspace(container, opts = {}) {
   root = container;
   onAnalyze = opts.onAnalyze || (() => {});
+  onStateChange = opts.onStateChange || (() => {});
   if (opts.reset) state = freshState();
   root.innerHTML = "";
   bind();

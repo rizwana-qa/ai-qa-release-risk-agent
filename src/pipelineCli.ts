@@ -135,7 +135,7 @@ function stepValidate(state: PipelineState): void {
     state.trace.push({ step: "validate-structured-findings", ok: true });
   } else {
     state.agentValidation = { ok: false, problems: v.problems };
-    state.trace.push({ step: "validate-structured-findings", ok: false, detail: `${v.problems.length} problem(s)` });
+    state.trace.push({ step: "validate-structured-findings", ok: false, detail: `${v.problems.length} ${v.problems.length === 1 ? "problem" : "problems"}` });
   }
 }
 
@@ -151,7 +151,7 @@ function stepAdapt(state: PipelineState): void {
     state.trace.push({ step: "deterministic-adapter", ok: true });
   } else {
     state.adapterResult = { ok: false, problems: r.problems };
-    state.trace.push({ step: "deterministic-adapter", ok: false, detail: `${r.problems.length} problem(s)` });
+    state.trace.push({ step: "deterministic-adapter", ok: false, detail: `${r.problems.length} ${r.problems.length === 1 ? "problem" : "problems"}` });
   }
 }
 
@@ -182,7 +182,7 @@ function stepAssemble(state: PipelineState): ReleaseReport {
   const af = (state.agentFindings ?? {}) as Partial<AgentFindings>;
   const report: ReleaseReport = {
     scenario: state.scenario,
-    decisionAuthority: "evaluateReleaseGate() (deterministic) — the AI agent explains the risk, it does not decide",
+    decisionAuthority: "evaluateReleaseGate() (deterministic). The AI agent explains the risk. It does not decide.",
     releaseDecision: state.gate?.decision ?? null,
     firedRule: state.gate?.firedRule ?? null,
     reasons: state.gate?.reasons ?? [],

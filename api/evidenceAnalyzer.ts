@@ -16,6 +16,27 @@ import type { NormalizedDatasets, AssessmentContext, CoverageStats } from "./inp
 
 const SEV_RANK: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
 
+/** Grammatically correct singular/plural for a restated count — never a
+ * literal "(s)" placeholder left unresolved in user-facing report text. */
+function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
+  return n === 1 ? singular : pluralForm;
+}
+
+/**
+ * A one-line summary should read as a summary, not a mid-clause slice — cut
+ * at the last sentence boundary within the limit when there is one, so it
+ * never ends abruptly with neither a start nor an outcome.
+ */
+function summarize(text: string, maxLen = 240): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= maxLen) return trimmed;
+  const window = trimmed.slice(0, maxLen);
+  const lastSentenceEnd = Math.max(window.lastIndexOf(". "), window.lastIndexOf(".\n"));
+  if (lastSentenceEnd > maxLen * 0.4) return window.slice(0, lastSentenceEnd + 1);
+  const lastSpace = window.lastIndexOf(" ");
+  return (lastSpace > maxLen * 0.6 ? window.slice(0, lastSpace) : window).trimEnd() + "…";
+}
+
 interface DbAc { id: string; area: string; critical: boolean; text: string }
 interface DbTest { testId: string; area: string; status: string; covers: string[] }
 interface DbDefect { defectId: string; severity: string; status: string; area: string; security: boolean }
@@ -43,13 +64,14 @@ export function analyzeEvidence(
   /* ---- identified risks: dedup by area, restatements only ---- */
   const riskByArea = new Map<string, { area: string; description: string; severity: FindingSeverity }>();
   for (const d of openDefects) {
-    const ids = openDefects.filter((x) => x.area === d.area).map((x) => x.defectId).join(", ");
+    const sameArea = openDefects.filter((x) => x.area === d.area);
+    const ids = sameArea.map((x) => x.defectId).join(", ");
     const sev = (d.security ? "critical" : d.severity) as FindingSeverity;
     const cur = riskByArea.get(d.area);
     if (!cur || (SEV_RANK[sev] ?? 0) > (SEV_RANK[cur.severity] ?? 0)) {
       riskByArea.set(d.area, {
         area: d.area,
-        description: `Open defect(s) in this area: ${ids}${d.security ? " (security-related)" : ""}.`,
+        description: `${plural(sameArea.length, "Open defect", "Open defects")} in this area: ${ids}${d.security ? " (security-related)" : ""}.`,
         severity: sev,
       });
     }
@@ -76,7 +98,7 @@ export function analyzeEvidence(
   const coverageAssessment = covMap.map((c) => ({
     acceptanceCriterionId: c.acceptanceCriterionId,
     covered: Boolean(c.covered),
-    notes: `${c.activeTests.length} passing test(s) of ${c.mappedTests.length} linked.`,
+    notes: `${c.activeTests.length} ${plural(c.activeTests.length, "passing test", "passing tests")} of ${c.mappedTests.length} linked.`,
   }));
 
   /* ---- missing scenarios: uncovered criteria + business rules ---- */
@@ -108,7 +130,7 @@ export function analyzeEvidence(
     let rationale = `Inherent ${riskLevels[area] ?? "medium"} risk area; no open defects or coverage gaps recorded.`;
     if (areasWithOpenDefect.has(area)) {
       priority = "high";
-      rationale = `Area has open defect(s) in the submitted evidence.`;
+      rationale = `This area has one or more open defects in the submitted evidence.`;
     } else if (areasWithUncoveredCritical.has(area)) {
       priority = "high";
       rationale = `Area has a critical acceptance criterion with no active test coverage.`;
@@ -121,13 +143,17 @@ export function analyzeEvidence(
 
   /* ---- risk explanation: composed from the facts, no invented narrative ---- */
   const parts: string[] = [
-    `This assessment is based on ${acs.length} acceptance criterion(a), ${tests.length} test case(s) ` +
-      `(${coverageStats.passed} passing, ${coverageStats.failed} failed, ${coverageStats.blocked} blocked), and ${defects.length} known defect(s).`,
+    `This assessment is based on ${acs.length} ${plural(acs.length, "acceptance criterion", "acceptance criteria")}, ${tests.length} ${plural(tests.length, "test case")} ` +
+      `(${coverageStats.passed} passing, ${coverageStats.failed} failed, ${coverageStats.blocked} blocked), and ${defects.length} known ${plural(defects.length, "defect")}.`,
   ];
-  if (openCritical.length) parts.push(`${openCritical.length} open critical defect(s) remain unresolved.`);
-  if (openSecurity.length) parts.push(`${openSecurity.length} open security-flagged defect(s) at critical/high severity were reported.`);
+  if (openCritical.length) {
+    parts.push(`${openCritical.length} open critical ${plural(openCritical.length, "defect")} ${plural(openCritical.length, "remains", "remain")} unresolved.`);
+  }
+  if (openSecurity.length) {
+    parts.push(`${openSecurity.length} open security-flagged ${plural(openSecurity.length, "defect")} at critical/high severity ${plural(openSecurity.length, "was", "were")} reported.`);
+  }
   if (uncoveredCritical.length) {
-    parts.push(`${uncoveredCritical.length} critical acceptance criterion(a) have no active (passing) test coverage: ${uncoveredCritical.map((a) => a.id).join(", ")}.`);
+    parts.push(`${uncoveredCritical.length} critical ${plural(uncoveredCritical.length, "acceptance criterion", "acceptance criteria")} ${plural(uncoveredCritical.length, "has", "have")} no active (passing) test coverage: ${uncoveredCritical.map((a) => a.id).join(", ")}.`);
   }
   if (coverageStats.coveragePercent < 80) {
     parts.push(`Active coverage is ${coverageStats.coveragePercent}% of acceptance criteria, below the 80% threshold.`);
@@ -139,7 +165,7 @@ export function analyzeEvidence(
 
   return {
     schemaVersion: 1,
-    changeSummary: (context.releaseScope || req.description || "Release assessment").slice(0, 600),
+    changeSummary: summarize(context.releaseScope || req.description || "Release assessment"),
     identifiedRisks,
     coverageAssessment,
     missingScenarios: missingCapped,

@@ -6,7 +6,7 @@
 // never shows GO from a client-side fallback.
 
 import * as C from "./components.js";
-import { mountWorkspace, getPayload, setValidation, setBusy } from "./workspace.js";
+import { mountWorkspace, getPayload, setValidation, setBusy, getWorkflowState, loadScenario } from "./workspace.js";
 
 const CUSTOM_STAGES = [
   ["prepare-context", "Preparing release context"],
@@ -29,34 +29,59 @@ const app = {
   result: null,
   failed: false,
   lastRun: null, // { kind:"custom", payload } | { kind:"demo" }
+  ws: { contextComplete: false, canAnalyze: false, demoLoaded: false },
 };
 
-/* ------------------------------- phase paint ------------------------------ */
+/* ------------------------------- step state -------------------------------- */
+//
+// Real, derived state — never decorative. Each of the five steps is exactly
+// one of: locked | available | current | complete, computed from the actual
+// application phase plus (while on the workspace) the live form validity
+// workspace.js already enforces (canAnalyze(), section completion). Nothing
+// here invents a new validation rule; it only reflects the existing ones.
 
-// Presentation only: mark each header workflow step as done / current / upcoming
-// for the current phase, and drive the mobile compact "Step N of 4" indicator.
-// Same phase -> step mapping as before. No navigation, no click behaviour.
-const STEP_STATE = {
-  workspace: { context: "current", evidence: "current", analyze: "upcoming", review: "upcoming" },
-  processing: { context: "done", evidence: "done", analyze: "current", review: "upcoming" },
-  report: { context: "done", evidence: "done", analyze: "done", review: "current" },
-};
-const STEP_ORDER = ["context", "evidence", "analyze", "review"];
-const STEP_LABEL = { context: "Context", evidence: "Evidence", analyze: "Analyze", review: "Review" };
+const STEP_ORDER = ["context", "evidence", "analyze", "review", "decision"];
+const STEP_LABEL = { context: "Context", evidence: "Evidence", analyze: "Analyze", review: "Review", decision: "Decision" };
+
+function computeStepStates() {
+  if (app.phase === "processing") {
+    return { context: "complete", evidence: "complete", analyze: "current", review: "locked", decision: "locked" };
+  }
+  if (app.phase === "report") {
+    // The assessment has finished and a decision exists — every step is done,
+    // not "in progress". A stale "current" here was the exact bug: nothing is
+    // still running once the report is on screen.
+    return { context: "complete", evidence: "complete", analyze: "complete", review: "complete", decision: "complete" };
+  }
+  // workspace
+  const ctxOk = app.ws.contextComplete;
+  return {
+    context: ctxOk ? "complete" : "current",
+    evidence: ctxOk ? "available" : "locked",
+    analyze: app.ws.canAnalyze ? "available" : "locked",
+    review: "locked",
+    decision: "locked",
+  };
+}
 
 function paintSteps() {
-  const map = STEP_STATE[app.phase] || STEP_STATE.workspace;
+  const map = computeStepStates();
   steps.querySelectorAll("[data-step]").forEach((el) => {
-    el.dataset.state = map[el.dataset.step] || "upcoming";
+    const s = map[el.dataset.step] || "locked";
+    el.dataset.state = s;
+    el.disabled = s === "locked";
+    el.setAttribute("aria-disabled", s === "locked" ? "true" : "false");
+    const stateEl = el.querySelector(".flow__state");
+    if (stateEl) stateEl.textContent = s === "complete" ? "Complete" : s === "current" ? "In progress" : s === "available" ? "Available" : "Locked";
   });
 
-  // mobile compact indicator: "STEP N OF 4: LABEL" + progress bar
+  // mobile compact indicator: "STEP N OF 5: LABEL" + progress bar
   const curKey = STEP_ORDER.find((k) => map[k] === "current")
-    || (app.phase === "report" ? "review" : "context");
+    || (app.phase === "report" ? "decision" : "context");
   const curIdx = STEP_ORDER.indexOf(curKey) + 1;
   const label = steps.querySelector(".flow__compact-label");
   const fill = steps.querySelector(".flow__compact-fill");
-  if (label) label.textContent = `Step ${curIdx} of 4: ${STEP_LABEL[curKey]}`;
+  if (label) label.textContent = `Step ${curIdx} of ${STEP_ORDER.length}: ${STEP_LABEL[curKey]}`;
   if (fill) fill.style.width = `${(curIdx / STEP_ORDER.length) * 100}%`;
 
   // "Relaunch to update" only makes sense once a report is showing, and only
@@ -64,13 +89,48 @@ function paintSteps() {
   if (relaunchBtn) relaunchBtn.hidden = !(app.phase === "report" && app.lastRun);
 }
 
+/** Sidebar nav is real navigation, not decoration: unlocked steps scroll to
+ * (or, from the report, go back to) their section; locked steps do nothing. */
+steps.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-step]");
+  if (!btn || btn.disabled) return;
+  const step = btn.dataset.step;
+
+  if (app.phase === "report") {
+    if (step === "context" || step === "evidence") { toWorkspace({ reset: false }); return; }
+    if (step === "decision") { view.querySelector(".exec-grid")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    if (step === "review") { view.querySelector(".card--risksig, .exec-grid")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    return;
+  }
+  if (app.phase === "workspace") {
+    if (step === "context") document.getElementById("ws-context-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (step === "evidence") document.getElementById("ws-evidence-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (step === "analyze") view.querySelector('[data-act="analyze"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+});
+
 function toWorkspace({ reset = false } = {}) {
   app.phase = "workspace";
   app.result = null;
   app.failed = false;
   view.innerHTML = '<div id="ws-root"></div>';
-  mountWorkspace(document.getElementById("ws-root"), { onAnalyze: submitCustom, reset });
-  paintSteps();
+  mountWorkspace(document.getElementById("ws-root"), {
+    onAnalyze: onWorkspaceAnalyze,
+    onStateChange: (ws) => { app.ws = ws; paintSteps(); },
+    reset,
+  });
+}
+
+/** A demo/regression scenario loaded verbatim (never edited) analyzes through
+ * the fixed-fixture path so its result matches the fixture's own dataset
+ * exactly; anything else — including a demo scenario the user has since
+ * edited — is a real, user-authored submission. */
+function onWorkspaceAnalyze() {
+  if (getWorkflowState().demoLoaded && app.lastRun?.kind === "demo") {
+    runDemoAnalyze();
+    return;
+  }
+  submitCustom();
 }
 
 function toProcessing(stageDefs) {
@@ -236,6 +296,11 @@ function finishCustom(result) {
 
 /* ------------------------------- demo run ------------------------------ */
 
+/**
+ * Loads the real REQ-BEN-001 regression fixture into the SAME workspace form
+ * manual entry uses, and stops there — same workflow as manual entry, per
+ * Context -> Evidence -> (user clicks) Analyze. Nothing is auto-analyzed.
+ */
 async function runDemo() {
   closeMenu();
   let meta, scenario;
@@ -249,7 +314,17 @@ async function runDemo() {
     return;
   }
 
-  app.lastRun = { kind: "demo" };
+  app.lastRun = { kind: "demo", meta, scenario };
+  toWorkspace({ reset: false });
+  loadScenario(buildContextFromScenario(scenario));
+}
+
+/** The real analyze step for a not-yet-edited demo/regression run, invoked
+ * only from the user's own Analyze click (see onWorkspaceAnalyze). Uses the
+ * meta/scenario already fetched by runDemo() — no re-fetch, same backend
+ * calls (/api/assess or /api/assess/stream) as before this workflow fix. */
+function runDemoAnalyze() {
+  const { meta, scenario } = app.lastRun;
   const stageDefs = (meta.stages || []).map((s) => [s.key, s.label]);
   toProcessing(stageDefs.length ? stageDefs : CUSTOM_STAGES);
 
@@ -258,11 +333,12 @@ async function runDemo() {
   // meta.streaming === false; fall back to the existing blocking call
   // instead of opening an EventSource that has nothing to connect to.
   if (typeof EventSource !== "function" || meta.streaming === false) {
-    try {
-      const assess = await fetchJson("/api/assess?id=REQ-BEN-001", { method: "POST" });
-      for (const s of app.stages) s.status = "done";
-      toReport(demoResult(assess, scenario));
-    } catch (err) { toError(errText(err)); }
+    fetchJson("/api/assess?id=REQ-BEN-001", { method: "POST" })
+      .then((assess) => {
+        for (const s of app.stages) s.status = "done";
+        toReport(demoResult(assess, scenario));
+      })
+      .catch((err) => toError(errText(err)));
     return;
   }
 
@@ -277,6 +353,31 @@ async function runDemo() {
     else if (ev.type === "end") { es.close(); if (!done && app.phase === "processing") { markRunningFailed(); toError("The stream ended without a result."); } }
   };
   es.onerror = () => { es.close(); if (!done) { markRunningFailed(); toError("The connection to the assessment stream was lost."); } };
+}
+
+/** The scenario's own real data, shaped for the workspace form (same shape
+ * manual entry produces) — used to populate Context/Evidence, not to compute
+ * anything. */
+function buildContextFromScenario(s) {
+  const testCases = s.tests.map((t) => ({
+    label: t.testId, title: t.title, area: t.area, testType: t.testType,
+    status: t.status === "active" ? "passed" : "not-run",
+    covers: t.covers || [],
+  }));
+  return {
+    releaseName: "REQ-BEN-001 · regression fixture",
+    releaseScope: s.requirement.description,
+    userStory: s.requirement.title,
+    criticality: s.requirement.criticality,
+    acceptanceCriteria: s.acceptanceCriteria.map((a) => ({ area: a.area, critical: a.critical, text: a.text })),
+    businessRules: [],
+    testCases,
+    defects: s.defects.map((d) => ({
+      label: d.defectId, severity: d.severity, status: d.status,
+      area: d.area, security: d.security, description: d.description,
+      relatedAcs: d.relatedAcceptanceCriteria || [],
+    })),
+  };
 }
 
 /** Reshape the fixed-scenario response into the shape reportView() expects. */
@@ -355,16 +456,6 @@ view.addEventListener("click", (e) => {
   }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (!act) return;
-  if (act === "toggle-raw") {
-    const pre = view.querySelector("[data-raw]");
-    const btn = e.target.closest("[data-act]");
-    if (pre) {
-      const show = pre.hasAttribute("hidden");
-      pre.toggleAttribute("hidden", !show);
-      btn.textContent = show ? "Hide raw assessment JSON" : "Show raw assessment JSON";
-    }
-    return;
-  }
   if (act === "print") { window.print(); return; }
   if (act === "new") toWorkspace({ reset: false });
   else if (act === "edit") toWorkspace({ reset: false });
@@ -372,7 +463,7 @@ view.addEventListener("click", (e) => {
 });
 
 function retry() {
-  if (app.lastRun?.kind === "demo") { runDemo(); return; }
+  if (app.lastRun?.kind === "demo") { toProcessing(CUSTOM_STAGES); runDemoAnalyze(); return; }
   if (app.lastRun?.kind === "custom") {
     toProcessing(CUSTOM_STAGES);
     blockingCustom(app.lastRun.payload);

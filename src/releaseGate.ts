@@ -214,7 +214,8 @@ export function securityFailure(findings: ReleaseFindings): { failed: boolean; r
     (d) => d.status === "open" && d.security === true && qualifying.has(d.severity),
   );
   if (sec1.length > 0) {
-    reasons.push(`SEC-1: open security-flagged defect(s) at qualifying severity: ${sec1.map((d) => d.defectId).join(", ")}.`);
+    const noun = sec1.length === 1 ? "defect" : "defects";
+    reasons.push(`SEC-1: open security-flagged ${noun} at qualifying severity: ${sec1.map((d) => d.defectId).join(", ")}.`);
   }
 
   const sec2 = findings.acceptanceCriteria.filter(
@@ -381,10 +382,11 @@ export function evaluateReleaseGate(input: unknown): GateResult {
       (d) => d.status === "open" && d.severity === "critical",
     );
     if (openCriticalDefects.length > 0) {
+      const noun = openCriticalDefects.length === 1 ? "defect" : "defects";
       return {
         decision: "NO_GO",
         firedRule: "GATE-1",
-        reasons: [`GATE-1: open critical defect(s): ${openCriticalDefects.map((d) => d.defectId).join(", ")}.`],
+        reasons: [`GATE-1: open critical ${noun}: ${openCriticalDefects.map((d) => d.defectId).join(", ")}.`],
       };
     }
 
@@ -421,11 +423,19 @@ export function evaluateReleaseGate(input: unknown): GateResult {
       };
     }
 
-    // GATE-5 — Otherwise.
+    // GATE-5 — Otherwise. Coverage may genuinely be adequate, or merely not
+    // high-risk-enough to block (GATE-4's condition) — the reason must say
+    // which, never blanket-claim "adequate" when it isn't, so this can never
+    // read as contradicting the coverage figures shown elsewhere.
     return {
       decision: "GO",
       firedRule: "GATE-5",
-      reasons: [`GATE-5: no blocking condition met (change risk level: ${risk}; coverage adequate).`],
+      reasons: coverage.insufficient
+        ? [
+            `GATE-5: no blocking condition met (change risk level: ${risk}; coverage is insufficient but does not block release at this risk level).`,
+            ...coverage.reasons,
+          ]
+        : [`GATE-5: no blocking condition met (change risk level: ${risk}; coverage adequate).`],
     };
   } catch (err) {
     // Any unexpected error also fails safe.

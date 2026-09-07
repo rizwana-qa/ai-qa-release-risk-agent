@@ -6,8 +6,8 @@
 
 import { ICONS } from "./icons.js";
 import {
-  esc, humanizeArea, upper, decisionLabel, decisionClass,
-  severityClass, priorityClass, coverageClass, testStatusClass, groupScenarios,
+  esc, humanizeArea, displayArea, formatFreeText, upper, decisionLabel, decisionClass,
+  severityClass, priorityClass, coverageClass, testStatusClass, groupScenarios, formatTraceDetail,
 } from "./format.js";
 
 /* -------------------------------- primitives ---------------------------- */
@@ -116,6 +116,9 @@ export function reportView(result) {
   }
 
   parts.push(execGrid(report, summary, cov, decision));
+  parts.push(riskSignalsPanel(report, ctx));
+  parts.push(aiStagePanel(report, meta));
+  parts.push(historyEmptyState());
   parts.push(readinessCard(report, summary, cov));
   parts.push(aiAnalysisAccordion(report));
   parts.push(coverageAccordion(report, summary, cov, ctx));
@@ -168,16 +171,116 @@ function execGrid(report, summary, cov, decision) {
     ? report.reasons[0]
     : "The deterministic QA gate reported no blocking reasons for this release.";
 
+  const ringIcon = decision === "GO" ? ICONS.check : decision === "NO_GO" ? ICONS.x : decision === "CONDITIONAL" ? ICONS.alert : ICONS.dot;
+
   return `<div class="exec-grid">
+    <div class="decision-box ${decisionClass(decision)}">
+      <div class="decision-ring" aria-hidden="true"><span class="decision-ring__icon">${ringIcon}</span></div>
+      <div class="decision-box__text">
+        <span class="decision-box__label">Release decision</span>
+        <span class="decision-box__value">${esc(decisionLabel(decision))}</span>
+        <span class="decision-box__meta">${report.firedRule ? `Deterministic gate · ${esc(report.firedRule)}` : "Deterministic QA gate"}</span>
+        <p class="decision-box__note">${esc(firstReason)}</p>
+      </div>
+    </div>
     ${metric("Change risk", cr ? upper(cr) : "N/A", crCls, "Highest-risk area affected")}
     ${metric("Test coverage", tc ? upper(tc) : "N/A", tcCls, covHint)}
     ${metric("Security risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : "N/A", secCls, "Security failure check")}
-    <div class="decision-box ${decisionClass(decision)}">
-      <span class="decision-box__label">Release decision</span>
-      <span class="decision-box__value">${esc(decisionLabel(decision))}</span>
-      <span class="decision-box__meta">${report.firedRule ? `Deterministic gate · ${esc(report.firedRule)}` : "Deterministic QA gate"}</span>
-      <p class="decision-box__note">${esc(firstReason)}</p>
+  </div>`;
+}
+
+/* ---- risk signals (real identifiedRisks + regressionPriorities + defects + gate reasons; no invented scores) ---- */
+
+/** One labelled, counted section per kind of signal — never a single flat
+ * list. Identified risks, regression priorities and open defects are three
+ * different questions ("what's risky", "what to retest", "what's already
+ * broken"); folding them into one undifferentiated row list was the actual
+ * source of the report reading as a dense, monotonous wall of near-identical
+ * rows. */
+function riskGroup(icon, title, rows) {
+  if (!rows.length) return "";
+  return `<div class="risksig-group">
+    <div class="risksig-group__head">${icon}<span>${esc(title)}</span><span class="risksig-group__count">${rows.length}</span></div>
+    <div class="risksig-rows">${rows.map((r) => `
+      <div class="risksig-row">
+        <span class="risksig-row__area">${r.id ? `<span class="mono risksig-row__idtag">${esc(r.id)}</span> ` : ""}${esc(r.area)}</span>
+        ${badge(upper(r.level || "n/a"), r.cls)}
+        <span class="risksig-row__note">${r.note ? formatFreeText(r.note) : ""}</span>
+      </div>`).join("")}</div>
+  </div>`;
+}
+
+function riskSignalsPanel(report, ctx) {
+  const risks = Array.isArray(report.identifiedRisks) ? report.identifiedRisks : [];
+  const regress = Array.isArray(report.regressionPriorities) ? report.regressionPriorities : [];
+  const defects = Array.isArray(ctx.defects) ? ctx.defects : [];
+  const openDefects = defects.filter((d) => d && d.status === "open");
+  const reasons = Array.isArray(report.reasons) ? report.reasons : [];
+
+  const riskRows = risks.map((r) => ({ area: displayArea(r.area), level: r.severity, cls: severityClass(r.severity), note: r.description }));
+  const regressRows = regress.map((p) => ({ area: displayArea(p.area), level: p.priority, cls: priorityClass(p.priority), note: p.rationale }));
+  const defectRows = openDefects.map((d) => ({ id: d.label || d.id, area: displayArea(d.area), level: d.severity, cls: severityClass(d.severity), note: d.description }));
+
+  const hasAny = riskRows.length || regressRows.length || defectRows.length;
+  const body = hasAny
+    ? riskGroup(ICONS.alert, "Identified risks", riskRows)
+      + riskGroup(ICONS.target, "Regression priorities", regressRows)
+      + riskGroup(ICONS.bug, "Open defects", defectRows)
+    : `<p class="muted">No specific risk signals were identified from the submitted evidence.</p>`;
+
+  const gateNote = reasons.length
+    ? `<div class="risksig-gate"><span class="eyebrow">Quality gate</span><ul class="bullets bullets--reason">${reasons.map((r) => `<li>${ICONS.scale}<span>${esc(r)}</span></li>`).join("")}</ul></div>`
+    : "";
+
+  return `<section class="card card--risksig">
+    <div class="card__head"><span class="ico">${ICONS.gauge}</span><h2>Risk signals</h2><span class="hint">From AI analysis + deterministic QA data</span></div>
+    <div class="card__body">
+      ${body}
+      ${gateNote}
     </div>
+  </section>`;
+}
+
+/* ---- AI pipeline stage status (real pipelineTrace + meta.pipelineStages; post-completion, not animated) ---- */
+
+function aiStagePanel(report, meta) {
+  const stageLabels = Array.isArray(meta.pipelineStages) ? meta.pipelineStages : [];
+  const trace = Array.isArray(report.pipelineTrace) ? report.pipelineTrace : [];
+  if (!stageLabels.length && !trace.length) return "";
+
+  // Best-effort real status per labelled stage: match by position against the
+  // trace this exact run produced. No fabricated "in progress" states here —
+  // this renders only once the pipeline has already finished.
+  const rows = stageLabels.length
+    ? stageLabels.map((label, i) => {
+        const t = trace[i];
+        const ok = t ? t.ok !== false : undefined;
+        return { label, ok, detail: t?.detail };
+      })
+    : trace.map((t) => ({ label: t.step, ok: t.ok !== false, detail: t.detail }));
+
+  const items = rows.map((r) => `
+    <div class="aistage-row">
+      <span class="aistage-row__icon aistage-row__icon--${r.ok === false ? "fail" : "ok"}">${r.ok === false ? ICONS.x : ICONS.check}</span>
+      <span class="aistage-row__label">${esc(r.label)}</span>
+      ${r.detail ? `<span class="aistage-row__detail">${esc(formatTraceDetail(r.detail))}</span>` : ""}
+    </div>`).join("");
+
+  return `<section class="card card--ai">
+    <div class="card__head"><span class="ico">${ICONS.sparkle}</span><h2>AI analysis pipeline</h2><span class="lane lane--ai">Complete</span></div>
+    <div class="card__body">
+      <div class="aistage-rows">${items}</div>
+      <p class="mode-note mt-3">Reflects the real pipeline trace for this assessment. It is not a simulation.</p>
+    </div>
+  </section>`;
+}
+
+/* ---- release history (this system has no cross-release historical store) ---- */
+
+function historyEmptyState() {
+  return `<div class="hist-empty">
+    <span class="ico">${ICONS.book}</span>
+    <span>No historical release data available. Each assessment reflects only the evidence submitted for this release.</span>
   </div>`;
 }
 
@@ -248,9 +351,12 @@ function readinessCard(report, summary, cov) {
 function recommendedActions(report) {
   const out = [];
   const openDefects = (report.defectReview || []).filter((d) => d && d.stillRelevant).map((d) => d.defectId);
-  if (openDefects.length) out.push(`Resolve or re-triage the still-open defect(s): ${openDefects.join(", ")}.`);
+  if (openDefects.length) {
+    const noun = openDefects.length === 1 ? "defect" : "defects";
+    out.push(`Resolve or re-triage the still-open ${noun}: ${openDefects.join(", ")}.`);
+  }
   for (const s of (report.missingScenarios || []).slice(0, 6)) out.push(String(s));
-  const highReg = (report.regressionPriorities || []).filter((p) => p && p.priority === "high").map((p) => humanizeArea(p.area));
+  const highReg = (report.regressionPriorities || []).filter((p) => p && p.priority === "high").map((p) => displayArea(p.area));
   if (highReg.length) out.push(`Run a focused regression pass on: ${highReg.join(", ")}.`);
   return out;
 }
@@ -258,26 +364,17 @@ function recommendedActions(report) {
 /* ---- AI analysis (advisory) ---- */
 
 function aiAnalysisAccordion(report) {
-  const risks = Array.isArray(report.identifiedRisks) ? report.identifiedRisks : [];
-  const riskRows = risks.length
-    ? risks.map((r) => `<div class="item open">
-        <div class="item__head">
-          <span class="item__title">${esc(humanizeArea(r.area))}</span>
-          ${badge(upper(r.severity), severityClass(r.severity))}
-        </div>
-        <div class="item__body">${esc(r.description)}</div>
-      </div>`).join("")
-    : `<p class="muted">No risks were identified from the submitted evidence.</p>`;
+  const riskCount = Array.isArray(report.identifiedRisks) ? report.identifiedRisks.length : 0;
 
+  // The itemized risks (and regression priorities, and open defects) live
+  // once, in the Risk Signals panel above — this section owns the narrative
+  // summary only, plus a pointer, so the same finding is never listed twice.
   const body = `
-    <div class="banner banner--info mb-4">
-      <span class="ico">${ICONS.info}</span>
-      <div>AI analysis provides risk assessment and recommendations. The deterministic QA rules make the final release decision.</div>
-    </div>
     <span class="eyebrow">Change summary</span>
-    <p class="lead mb-4">${esc(report.changeSummary || "Not provided.")}</p>
-    <span class="eyebrow">Identified risks</span>
-    <div class="stack mt-2">${riskRows}</div>`;
+    <p class="lead mb-4">${report.changeSummary ? formatFreeText(report.changeSummary) : "Not provided."}</p>
+    ${riskCount
+      ? `<p class="hint">${riskCount} identified risk${riskCount === 1 ? "" : "s"}. See Risk Signals above for the itemized list.</p>`
+      : `<p class="muted">No risks were identified from the submitted evidence.</p>`}`;
 
   return accordion("ai", { icon: ICONS.sparkle, title: "AI Analysis · Advisory", meta: `<span class="lane lane--ai">Advisory</span>`, open: true, ai: true }, body);
 }
@@ -307,8 +404,8 @@ function coverageAccordion(report, summary, cov, ctx) {
       : `<span class="muted">none</span>`;
     const note = aiNote.get(c.id);
     return `<tr class="${flagged ? "flagged" : ""}">
-      <td><span class="mono">${esc(c.id)}</span>${c.critical ? " " + badge("Critical", "b-high") : ""}<div class="muted" style="margin-top:3px">${esc(acText.get(c.id) || "")}</div></td>
-      <td>${badge(upper(c.coverage), coverageClass(c.coverage))}${note ? `<div class="muted" style="margin-top:3px">${esc(note)}</div>` : ""}</td>
+      <td><span class="mono">${esc(c.id)}</span>${c.critical ? " " + badge("Critical", "b-high") : ""}<div class="muted ac-text subtext">${acText.get(c.id) ? formatFreeText(acText.get(c.id)) : ""}</div></td>
+      <td>${badge(upper(c.coverage), coverageClass(c.coverage))}${note ? `<div class="muted subtext">${formatFreeText(note)}</div>` : ""}</td>
       <td>${chips}</td>
       <td>${badge(risk[0], risk[1])}</td>
     </tr>`;
@@ -334,7 +431,7 @@ function coverageAccordion(report, summary, cov, ctx) {
     ? `<div class="banner mb-3"><span class="ico">${ICONS.alert}</span>
        <div><b>The deterministic QA rules rate test coverage as insufficient for this release.</b>
        ${ruleReasons.length
-         ? `<ul style="margin:6px 0 0;padding-left:18px">${ruleReasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>`
+         ? `<ul class="bullets mt-2">${ruleReasons.map((r) => `<li><span>${esc(r)}</span></li>`).join("")}</ul>`
          : " See the gate reasons and the decision trace for the specific rule that applied."}</div></div>`
     : "";
 
@@ -378,12 +475,13 @@ function defectsAccordion(report, ctx) {
       <td>${badge(upper(d.severity), severityClass(d.severity))}</td>
       <td>${badge(upper(d.status), d.status === "open" ? "b-medium" : "b-low")}</td>
       <td>${d.security ? badge("Security", "b-security") : `<span class="muted">No</span>`}</td>
-      <td>${esc(humanizeArea(d.area))}</td>
-      <td>${rev ? `${rev.stillRelevant ? badge("Relevant", "b-high") : badge("Not relevant", "b-neutral")} <div class="muted" style="margin-top:3px">${esc(rev.notes || "")}</div>` : `<span class="muted">${esc(d.description)}</span>`}</td>
+      <td>${esc(displayArea(d.area))}</td>
+      <td>${rev ? `${rev.stillRelevant ? badge("Relevant", "b-high") : badge("Not relevant", "b-neutral")} <div class="muted subtext">${formatFreeText(rev.notes || "")}</div>` : `<span class="muted">${formatFreeText(d.description)}</span>`}</td>
     </tr>`;
   }).join("");
 
-  return accordion("defects", { icon: ICONS.bug, title: "Known defects", meta: badge(String(defects.length), "b-neutral") },
+  const openCount = defects.filter((d) => d.status === "open").length;
+  return accordion("defects", { icon: ICONS.bug, title: "Known defects", meta: badge(`${defects.length} total, ${openCount} open`, "b-neutral") },
     tableWrap(`<tr><th>Defect</th><th>Severity</th><th>Status</th><th>Security</th><th>Related area</th><th>Release impact</th></tr>`, rows));
 }
 
@@ -398,8 +496,8 @@ function regressionAccordion(report) {
   const order = { high: 0, medium: 1, low: 2 };
   const rows = [...list].sort((a, b) => (order[a.priority] ?? 3) - (order[b.priority] ?? 3)).map((p) => `<tr>
     <td>${badge(upper(p.priority), priorityClass(p.priority))}</td>
-    <td>${esc(humanizeArea(p.area))}</td>
-    <td>${esc(p.rationale || "")}</td>
+    <td>${esc(displayArea(p.area))}</td>
+    <td>${formatFreeText(p.rationale || "")}</td>
   </tr>`).join("");
   return accordion("regression", { icon: ICONS.route, title: "Regression priorities", meta: badge(String(list.length), "b-neutral") },
     tableWrap(`<tr><th>Priority</th><th>Area</th><th>Reason</th></tr>`, rows));
@@ -410,7 +508,7 @@ function regressionAccordion(report) {
 function riskyAccordion(report) {
   const text = report.aiQaExplanation;
   return accordion("risky", { icon: ICONS.info, title: "Why is this release risky?", meta: `<span class="lane lane--ai">AI narrative</span>`, ai: true },
-    text ? `<p class="lead">${esc(text)}</p>` : `<p class="muted">No explanation was produced.</p>`);
+    text ? `<p class="lead">${formatFreeText(text)}</p>` : `<p class="muted">No explanation was produced.</p>`);
 }
 
 /* ---- decision trace ---- */
@@ -420,9 +518,19 @@ function decisionTraceAccordion(report, ctx, cov) {
   const look = (key) => [...trace].reverse().find((t) => t.step === key);
   const okOf = (key) => { const e = look(key); return e ? e.ok !== false : undefined; };
 
+  // The trace only ever renders after the pipeline finished, so an "ai" or
+  // "gate" node reaching this point already succeeded (ok !== false) unless
+  // explicitly marked otherwise — it must show the same completed checkmark
+  // every other finished step does, not its identity icon forever (that
+  // reads as a stuck spinner/gear, not "done"). The distinguishing color
+  // (indigo for AI, cobalt for gate) still marks which kind of step it was.
   const dot = (kind, ok) => {
-    if (kind === "ai") return `<span class="tdot tdot--ai">${ICONS.sparkle}</span>`;
-    if (kind === "gate") return `<span class="tdot tdot--gate">${ICONS.scale}</span>`;
+    if (kind === "ai") return ok === false
+      ? `<span class="tdot tdot--ai tdot--fail">${ICONS.x}</span>`
+      : `<span class="tdot tdot--ai">${ICONS.check}</span>`;
+    if (kind === "gate") return ok === false
+      ? `<span class="tdot tdot--gate tdot--fail">${ICONS.x}</span>`
+      : `<span class="tdot tdot--gate">${ICONS.check}</span>`;
     if (ok === true) return `<span class="tdot tdot--ok">${ICONS.check}</span>`;
     if (ok === false) return `<span class="tdot tdot--fail">${ICONS.x}</span>`;
     return `<span class="tdot">${ICONS.dot}</span>`;
@@ -468,7 +576,7 @@ function technicalAccordion(result, report, meta, mode) {
   const traceRows = (report.pipelineTrace || []).map((t) => `<tr>
     <td class="mono">${esc(t.step)}</td>
     <td>${t.ok === false ? badge("FAIL", "b-high") : badge("OK", "b-low")}</td>
-    <td class="muted">${esc(t.detail || "")}</td>
+    <td class="muted">${esc(formatTraceDetail(t.detail || ""))}</td>
   </tr>`).join("") || `<tr><td colspan="3" class="muted">No trace.</td></tr>`;
 
   const chipRow = (list) => `<div class="chips">${(list || []).map((s) => badge(String(s), "b-neutral")).join("")}</div>`;
@@ -479,17 +587,13 @@ function technicalAccordion(result, report, meta, mode) {
       <dt>Findings validation</dt><dd>${report.agentOutputValid === true ? badge("Passed", "b-low") : badge("Failed / n/a", "b-high")}</dd>
       <dt>Adapter status</dt><dd>${report.adapterOk === true ? badge("Passed", "b-low") : badge("Failed / n/a", "b-high")}</dd>
       <dt>Gate rule fired</dt><dd class="mono">${esc(report.firedRule || "N/A")}</dd>
-      <dt>Decision authority</dt><dd>${esc((report.decisionAuthority || "evaluateReleaseGate() (deterministic)").replace(/\s*[‒-―]\s*/g, ". "))}</dd>
+      <dt>Decision authority</dt><dd>${esc(report.decisionAuthority || "evaluateReleaseGate() (deterministic).")}</dd>
     </dl>
     <div><span class="eyebrow">Pipeline stages</span>${chipRow((meta.pipelineStages || []).map((s, i) => `${i + 1}. ${s}`))}</div>
     <div><span class="eyebrow">MCP tools</span>${chipRow(meta.mcpTools)}</div>
     <div><span class="eyebrow">Gate evaluation order</span>${chipRow(meta.evaluationOrder)}</div>
     <div><span class="eyebrow">Data provenance</span>${tableWrap(`<tr><th>Key</th><th>Value</th></tr>`, provRows)}</div>
     <div><span class="eyebrow">Pipeline trace</span>${tableWrap(`<tr><th>Step</th><th>Result</th><th>Detail</th></tr>`, traceRows)}</div>
-    <div>
-      <button class="linkbtn" type="button" data-act="toggle-raw">Show raw assessment JSON</button>
-      <pre class="raw" data-raw hidden>${esc(JSON.stringify(result, null, 2))}</pre>
-    </div>
   </div>`;
 
   return accordion("technical", { icon: ICONS.flask, title: "Technical details", meta: `<span class="muted">Collapsed by default</span>` }, body);
