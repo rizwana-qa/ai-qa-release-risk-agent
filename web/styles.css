@@ -810,6 +810,15 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
      provenance, pipeline trace) since they all share this one selector. */
   table.data th{background:#0B2233;color:#ffffff;border-bottom-color:#0B2233;}
 
+  /* Risk Signals' three sub-groups (Identified risks/Regression priorities/
+     Open defects) currently have no enclosing border at all in print --
+     only a top divider between them. Give each its own light bordered box
+     for the same "visible container" treatment already used by cards,
+     KPIs and tables everywhere else in the report. */
+  .risksig-group{border:1px solid #C9D5DF;border-radius:8px;padding:14px 16px;}
+  .risksig-group + .risksig-group{margin-top:16px;padding-top:14px;border-top:1px solid #C9D5DF;}
+  .risksig-group__head{margin-bottom:8px;}
+
   /* Print-specific type scale -- a screen-optimized 13.5-15px section title
      reads fine on a backlit display at arm's length but is small on a
      printed page. Bumping just these three for print only. */
