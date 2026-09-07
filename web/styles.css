@@ -748,6 +748,20 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
     --text-2:#33404f;
     --text-3:#57687c;
   }
+  /* Chrome's print dialog can inject its own "localhost:8080" + date
+     header/footer into the printed margin area -- that text comes from
+     the browser's "Headers and footers" print option, never from this
+     page's own HTML (verified: the string "localhost" does not appear
+     anywhere in this app's rendered output). Explicit @page margins are
+     the one thing CSS can actually do about it: Chrome only draws its
+     own header/footer text inside the page margin it reserves, and a
+     page-authored margin claims that space instead. This isn't a
+     guaranteed override in every Chrome version, but it's the strongest
+     code-level lever available -- the fully reliable fix is still the
+     dialog's own toggle (Print / PDF -> More settings -> Headers and
+     footers -> off). */
+  @page{margin:16mm 14mm;}
+
   body{background:#fff;color:#0a0a0a;}
   .sidebar, .topbar, .sitefoot, .report__actions, .acc__meta .chev{display:none !important;}
   .app{display:block;}
