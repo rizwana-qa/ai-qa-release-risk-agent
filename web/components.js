@@ -327,12 +327,14 @@ function readinessCard(report, summary, cov) {
         </div>
         <div class="readiness__body">
           ${miniCards}
-          <div>
-            <span class="eyebrow">Why?</span>
-            <ul class="bullets bullets--reason">${whyItems}</ul>
+          <div class="readiness__explanation">
+            <div>
+              <span class="eyebrow">Why?</span>
+              <ul class="bullets bullets--reason">${whyItems}</ul>
+            </div>
+            ${secBlock}
           </div>
-          ${secBlock}
-          <div>
+          <div class="readiness__actions">
             <span class="eyebrow">Recommended next actions</span>
             <ul class="bullets bullets--action">${actionItems}</ul>
           </div>
@@ -404,7 +406,7 @@ function coverageAccordion(report, summary, cov, ctx) {
       : `<span class="muted">none</span>`;
     const note = aiNote.get(c.id);
     return `<tr class="${flagged ? "flagged" : ""}">
-      <td data-label="Criterion"><span class="mono">${esc(c.id)}</span>${c.critical ? " " + badge("Critical", "b-high") : ""}<div class="muted ac-text subtext">${acText.get(c.id) ? formatFreeText(acText.get(c.id)) : ""}</div></td>
+      <td data-label="Criterion"><div class="criterion-id"><span class="mono">${esc(c.id)}</span>${c.critical ? badge("Critical", "b-high") : ""}</div><div class="muted ac-text subtext">${acText.get(c.id) ? formatFreeText(acText.get(c.id)) : ""}</div></td>
       <td data-label="Coverage">${badge(upper(c.coverage), coverageClass(c.coverage))}${note ? `<div class="muted subtext">${formatFreeText(note)}</div>` : ""}</td>
       <td data-label="Related tests">${chips}</td>
       <td data-label="Risk">${badge(risk[0], risk[1])}</td>

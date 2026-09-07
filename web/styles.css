@@ -53,7 +53,7 @@
 
   --text-1:#F1F5F9;
   --text-2:#94A9BB;
-  --text-3:#668197;
+  --text-3:#6d89a1; /* +0.07 lightness from #668197 -- the only reason for this change: WCAG AA requires 4.5:1 for standard text and the prior value measured 4.20:1 on --navy-deep. Smallest bump that clears it, same hue. */
 
   --font-ui:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
   --font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
@@ -68,6 +68,12 @@
 
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;height:100%;}
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:0.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:0.01ms !important; scroll-behavior:auto !important;
+  }
+}
 body{
   background:var(--navy-midnight);
   color:var(--text-1);
@@ -91,7 +97,8 @@ svg{display:block;}
 
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;}
 .muted{color:var(--text-3);}
-.subtext{margin-top:7px;line-height:1.5;}
+.subtext{margin-top:9px;line-height:1.5;}
+.criterion-id{display:flex;align-items:center;gap:8px;}
 .hint{font-size:11.5px;color:var(--text-3);}
 .eyebrow{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:6px;}
 .lead{font-size:14px;line-height:1.65;color:var(--text-2);}
@@ -266,6 +273,7 @@ svg{display:block;}
 .lane--gate{background:var(--cobalt-tint);color:var(--cobalt);border:1px solid rgba(79,127,255,.3);}
 
 .chips{display:flex;gap:6px;flex-wrap:wrap;}
+.chips .badge{white-space:normal;}
 
 /* ---------------------------- cards / panels ------------------------------- */
 
@@ -295,10 +303,10 @@ svg{display:block;}
 /* ---------------------------- exec grid / hero decision -------------------- */
 
 .exec-grid{
-  display:grid;grid-template-columns:1.4fr repeat(3,1fr);gap:14px;margin-bottom:16px;
+  display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px;
 }
 .decision-box{
-  grid-row:1 / 3;
+  grid-row:1 / 3;min-width:0;
   background:var(--navy-deep);border:1px solid var(--border);border-radius:var(--r-lg);
   padding:22px;display:flex;gap:18px;align-items:center;
 }
@@ -315,7 +323,7 @@ svg{display:block;}
 
 .decision-box__text{display:flex;flex-direction:column;gap:3px;min-width:0;}
 .decision-box__label{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);}
-.decision-box__value{font-family:var(--font-mono);font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.1;}
+.decision-box__value{font-family:var(--font-ui);font-size:30px;font-weight:800;letter-spacing:-.01em;line-height:1.1;}
 .decision-box.d-go .decision-box__value{color:var(--emerald);}
 .decision-box.d-no-go .decision-box__value{color:var(--coral);}
 .decision-box.d-conditional .decision-box__value{color:var(--amber);}
@@ -324,6 +332,7 @@ svg{display:block;}
 .decision-box__note{font-size:12.5px;color:var(--text-2);margin-top:2px;max-width:52ch;}
 
 .metric{
+  min-width:0;
   background:var(--surface-elevated);border:1px solid var(--border);border-radius:var(--r-md);
   padding:14px 16px;display:flex;flex-direction:column;gap:4px;
 }
@@ -348,9 +357,10 @@ svg{display:block;}
 .risksig-rows{display:flex;flex-direction:column;}
 .risksig-row{
   display:grid;grid-template-columns:220px 90px 1fr;align-items:start;gap:14px;
-  padding:11px 0;
+  padding:13px 0;
 }
 .risksig-row + .risksig-row{border-top:1px solid var(--border-soft);}
+.risksig-row .badge{min-width:66px;justify-content:center;}
 .risksig-row__area{display:block;font-size:13px;font-weight:600;color:var(--text-1);}
 .risksig-row__idtag{color:var(--text-3);font-weight:600;font-size:11.5px;}
 .risksig-row__note{font-size:12.5px;color:var(--text-2);}
@@ -385,6 +395,16 @@ svg{display:block;}
 .readiness{display:flex;gap:20px;}
 .readiness .decision-box{grid-row:auto;flex:none;width:220px;flex-direction:column;align-items:flex-start;}
 .readiness__body{flex:1;display:flex;flex-direction:column;gap:16px;min-width:0;}
+/* Recommended actions is the terminal step in the Decision -> Evidence ->
+   Explanation -> Actions reading order -- a border/margin step-down marks it
+   as the distinct "what to do" takeaway instead of blending into the
+   why/security-check explanation blocks above it. */
+.readiness__actions{margin-top:4px;padding-top:16px;border-top:1px solid var(--border);}
+/* Evidence (mini-cards) -> Explanation (why/security) is the other seam in
+   the Decision -> Evidence -> Explanation -> Actions order that had no
+   visual break -- same treatment as .readiness__actions so all three later
+   layers read as distinct steps, not one undifferentiated block. */
+.readiness__explanation{display:flex;flex-direction:column;gap:16px;margin-top:4px;padding-top:16px;border-top:1px solid var(--border);}
 
 .bullets{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
 .bullets li{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text-2);}
@@ -460,7 +480,7 @@ table.data th{
   color:var(--text-3);padding:10px 14px;background:var(--surface-elevated);border-bottom:1px solid var(--border);
   white-space:nowrap;
 }
-table.data td{padding:11px 14px;border-bottom:1px solid var(--border-soft);color:var(--text-2);vertical-align:top;}
+table.data td{padding:13px 14px;border-bottom:1px solid var(--border-soft);color:var(--text-2);vertical-align:top;}
 table.data tr:last-child td{border-bottom:none;}
 table.data tr.flagged td{background:rgba(241,107,112,.06);}
 
@@ -744,7 +764,7 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
 /* ---------------------------- responsive ---------------------------------------- */
 
 @media (max-width:1180px){
-  .exec-grid{grid-template-columns:1fr 1fr;}
+  .exec-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
   .decision-box{grid-row:auto;grid-column:1 / -1;}
   .readiness{flex-direction:column;}
   .readiness .decision-box{width:auto;}
@@ -764,8 +784,7 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
 @media (max-width:680px){
   .container{padding:0 16px;}
   .topbar__inner{padding:0 16px;}
-  .exec-grid{grid-template-columns:1fr;}
-  .metric{flex-direction:row;align-items:center;justify-content:space-between;}
+  .exec-grid{grid-template-columns:minmax(0,1fr);}
   .stats, .mini-cards, .evstats{grid-template-columns:1fr 1fr;}
   .kv{grid-template-columns:1fr;}
   .kv dt{margin-top:8px;}
