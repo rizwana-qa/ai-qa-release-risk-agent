@@ -556,6 +556,17 @@ svg{display:block;}
    spacing sits outside the border, and the table fills its container edge
    to edge. */
 .acc__body > .tablewrap{padding:0;margin:0 20px 20px;}
+/* Same problem as .tablewrap: the Test-coverage accordion's QA-status alert
+   boxes are direct children of .acc__body, so the generic rule above forced
+   their padding to `0 20px 20px` — no top padding (text hugged the border) and,
+   because that padding sits *inside* the alert's own border, the bordered box
+   ran 20px wider on each side than the metric cards above and the table below.
+   Restore the alert's intended inner padding and inset the box with margin so
+   its edges line up with the rest of the section. */
+.acc[data-acc="coverage"] .acc__body > .banner{
+  padding:14px 16px;
+  margin:0 20px 12px;
+}
 .acc.card--ai .acc__head{background:linear-gradient(180deg,rgba(115,103,240,.06),transparent);}
 
 /* ---------------------------- tables ---------------------------------------- */
