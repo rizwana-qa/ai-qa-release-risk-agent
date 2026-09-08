@@ -23,6 +23,12 @@ playwright/.cache/
 # The demo TEST (tests/e2e/linkedin-demo.spec.ts) and its config ARE committed.
 artifacts/
 
+# Presentation exports — regenerated from presentation/*.md with marp-cli.
+# The deck SOURCE (presentation/*.md) and README ARE committed.
+presentation/*.pptx
+presentation/*.pdf
+presentation/*.html
+
 # Logs
 *.log
 npm-debug.log*
