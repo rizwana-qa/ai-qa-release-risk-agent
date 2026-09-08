@@ -23,6 +23,59 @@ const menuBtn = document.getElementById("menu-btn");
 const menuList = document.getElementById("menu-list");
 const relaunchBtn = document.getElementById("relaunch-btn");
 
+/* ---------------------------- workflow drawer ---------------------------- */
+//
+// Below 1024px the sidebar is an off-canvas drawer: a hamburger opens it, the
+// overlay or Escape closes it, focus is trapped while open and returned to the
+// hamburger on close. Above 1024px the sidebar is permanent and this is inert.
+
+const appEl = document.getElementById("app");
+const sidebarEl = document.getElementById("sidebar");
+const drawerBtn = document.getElementById("drawer-btn");
+const drawerOverlay = document.getElementById("drawer-overlay");
+const DRAWER_MQ = window.matchMedia("(max-width: 1024px)");
+
+function drawerFocusables() {
+  return [...sidebarEl.querySelectorAll('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => el.offsetParent !== null);
+}
+
+function openDrawer() {
+  if (!DRAWER_MQ.matches) return;
+  appEl.dataset.drawer = "open";
+  drawerOverlay.hidden = false;
+  drawerBtn.setAttribute("aria-expanded", "true");
+  document.body.style.overflow = "hidden";
+  (drawerFocusables()[0] || sidebarEl).focus();
+  document.addEventListener("keydown", onDrawerKeydown, true);
+}
+
+function closeDrawer({ restoreFocus = true } = {}) {
+  if (appEl.dataset.drawer !== "open") return;
+  delete appEl.dataset.drawer;
+  drawerOverlay.hidden = true;
+  drawerBtn.setAttribute("aria-expanded", "false");
+  document.body.style.overflow = "";
+  document.removeEventListener("keydown", onDrawerKeydown, true);
+  if (restoreFocus) drawerBtn.focus();
+}
+
+function onDrawerKeydown(e) {
+  if (e.key === "Escape") { e.preventDefault(); closeDrawer(); return; }
+  if (e.key !== "Tab") return;
+  const items = drawerFocusables();
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+
+drawerBtn.addEventListener("click", () =>
+  (appEl.dataset.drawer === "open" ? closeDrawer() : openDrawer()));
+drawerOverlay.addEventListener("click", () => closeDrawer());
+DRAWER_MQ.addEventListener("change", (e) => { if (!e.matches) closeDrawer({ restoreFocus: false }); });
+
 const app = {
   phase: "workspace", // workspace | processing | report
   stages: [],
@@ -66,9 +119,17 @@ function computeStepStates() {
 
 function paintSteps() {
   const map = computeStepStates();
+  // The one stage that currently has focus. On the report every stage is
+  // "complete", but "Decision" is still where the user is — it gets a distinct
+  // active treatment on top of its completion check.
+  const activeKey = app.phase === "report" ? "decision"
+    : app.phase === "processing" ? "analyze"
+    : (STEP_ORDER.find((k) => map[k] === "current") || "context");
   steps.querySelectorAll("[data-step]").forEach((el) => {
     const s = map[el.dataset.step] || "locked";
     el.dataset.state = s;
+    el.dataset.active = String(el.dataset.step === activeKey);
+    el.setAttribute("aria-current", el.dataset.step === activeKey ? "step" : "false");
     el.disabled = s === "locked";
     el.setAttribute("aria-disabled", s === "locked" ? "true" : "false");
     const stateEl = el.querySelector(".flow__state");
@@ -95,6 +156,8 @@ steps.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-step]");
   if (!btn || btn.disabled) return;
   const step = btn.dataset.step;
+  // A navigation choice dismisses the mobile drawer (no-op on desktop).
+  closeDrawer({ restoreFocus: false });
 
   if (app.phase === "report") {
     if (step === "context" || step === "evidence") { toWorkspace({ reset: false }); return; }

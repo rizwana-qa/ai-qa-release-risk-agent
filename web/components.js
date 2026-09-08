@@ -14,6 +14,23 @@ import {
 
 const badge = (text, cls) => `<span class="badge ${cls}">${esc(text)}</span>`;
 
+/** Trim to a word boundary near `max` chars, appending an ellipsis. Display only. */
+function clip(s, max) {
+  s = String(s ?? "").trim();
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  const sp = cut.lastIndexOf(" ");
+  return (sp > max * 0.6 ? cut.slice(0, sp) : cut).replace(/[.,;:\s]+$/, "") + "…";
+}
+
+/** "acceptanceCriteriaCount" -> "Acceptance criteria count". Display only. */
+function humanizeKey(k) {
+  return String(k)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/^\w/, (c) => c.toUpperCase());
+}
+
 function accordion(id, { icon, title, meta = "", open = false, ai = false }, bodyHtml) {
   return `<section class="acc${open ? " open" : ""}${ai ? " card--ai" : ""}" data-acc="${esc(id)}">
     <button class="acc__head" type="button" aria-expanded="${open ? "true" : "false"}" aria-controls="acc-body-${esc(id)}">
@@ -115,11 +132,16 @@ export function reportView(result) {
     </div>`);
   }
 
-  parts.push(execGrid(report, summary, cov, decision));
-  parts.push(riskSignalsPanel(report, ctx));
-  parts.push(aiStagePanel(report, meta));
-  parts.push(historyEmptyState());
+  // Priority 1-3: decision, why, blockers. Priority 4: KPIs. Priority 5:
+  // recommendations + readiness. Priority 6: AI pipeline, narrative, evidence,
+  // audit. This ordering is the on-screen reading order; the dedicated print
+  // layer (printReport) re-expresses the same data for paper.
+  parts.push(statusBanner(report, summary, decision));
+  parts.push(execSection(report, summary, cov, decision));
+  parts.push(riskRegister(report, ctx));
+  parts.push(recommendationsCard(report));
   parts.push(readinessCard(report, summary, cov));
+  parts.push(aiStagePanel(report, meta));
   parts.push(aiAnalysisAccordion(report));
   parts.push(coverageAccordion(report, summary, cov, ctx));
   parts.push(missingScenariosAccordion(report));
@@ -128,116 +150,209 @@ export function reportView(result) {
   parts.push(riskyAccordion(report));
   parts.push(decisionTraceAccordion(report, ctx, cov));
   parts.push(technicalAccordion(result, report, meta, mode));
+  parts.push(historyEmptyState());
+
+  const assessmentId = esc(ctx.requirementId || report.dataProvenance?.requirementId || report.scenario || "—");
+  const assessmentName = esc(ctx.releaseName || ctx.userStory || report.scenario || "Release assessment");
+  const description = ctx.releaseScope || ctx.userStory || "";
 
   return `<div class="report report--enter">
-    <div class="report__head">
-      <div>
-        <span class="eyebrow">Release risk report</span>
-        <h1>${esc(ctx.releaseName || ctx.userStory || report.scenario || "Release assessment")}</h1>
-        <p class="report__subtitle">AI-assisted risk analysis with a deterministic release-gate decision.</p>
+    <header class="report__head">
+      <div class="report__ident">
+        <span class="eyebrow">Release Risk Report</span>
+        <div class="report__idline"><span class="report__idtag mono">${assessmentId}</span></div>
+        <h1>${assessmentName}</h1>
+        ${description ? `<p class="report__subtitle">${esc(clip(String(description), 200))}</p>` : ""}
       </div>
       <div class="report__actions">
-        <button class="btn btn--ghost btn--sm" type="button" data-act="print">${ICONS.file} Print / PDF</button>
-        <button class="btn btn--ghost btn--sm" type="button" data-act="new">${ICONS.refresh} New assessment</button>
+        <button class="btn btn--ghost" type="button" data-act="print">${ICONS.file} Print / PDF</button>
+        <button class="btn btn--primary" type="button" data-act="new">${ICONS.refresh} New Assessment</button>
+      </div>
+    </header>
+    ${parts.join("\n")}
+    ${printReport(result, report, summary, cov, ctx, meta, decision)}
+  </div>`;
+}
+
+/* ---- executive decision grid: decision card + 3 KPIs + rationale panel ---- */
+
+/** Wording for an unavailable metric — never a bare "N/A", never anything that
+ * could read as success. */
+function kpiUnavailable(kind) {
+  return kind === "security" ? "Scan not provided" : "Not calculated";
+}
+
+function kpiCard(label, value, cls, supporting, icon) {
+  return `<div class="kpi kpi--${cls}">
+    <span class="kpi__label"><span class="kpi__icon">${icon}</span>${esc(label)}</span>
+    <span class="kpi__value">${esc(value)}</span>
+    <span class="kpi__sub">${esc(supporting || "")}</span>
+  </div>`;
+}
+
+/** The single most prominent element on the page: the GO / NO GO / CONDITIONAL
+ * value, its gate identifier, and up to three of the gate's own blocking
+ * reasons. Every value is read verbatim from the deterministic gate. */
+function decisionCard(report, decision) {
+  const reasons = Array.isArray(report.reasons) ? report.reasons : [];
+  const ringIcon = decision === "GO" ? ICONS.check
+    : decision === "NO_GO" ? ICONS.x
+    : decision === "CONDITIONAL" ? ICONS.alert : ICONS.dot;
+  const blockers = reasons.slice(0, 3);
+  const blockLabel = decision === "GO" ? "Gate checks" : decision === "CONDITIONAL" ? "Conditions" : "Top blockers";
+  return `<div class="decision-box ${decisionClass(decision)}" role="group" aria-label="Release decision">
+    <div class="decision-box__ring" aria-hidden="true">${ringIcon}</div>
+    <span class="decision-box__label">Release decision</span>
+    <span class="decision-box__value">${esc(decisionLabel(decision))}</span>
+    <span class="decision-box__meta">Deterministic gate${report.firedRule ? ` · <span class="mono">${esc(report.firedRule)}</span>` : ""}</span>
+    ${blockers.length ? `<div class="decision-box__blockers">
+      <span class="eyebrow">${blockLabel}</span>
+      <ul>${blockers.map((r) => `<li>${ICONS.dot}<span>${esc(r)}</span></li>`).join("")}</ul>
+    </div>` : ""}
+    <p class="decision-box__authority">Decided by the deterministic QA gate from the submitted evidence. AI analysis explains the risk; it does not override this decision.</p>
+  </div>`;
+}
+
+/** "Why release is blocked / conditional / cleared" — grounded entirely in the
+ * gate's reasons, the rule identifiers embedded in them, the uncovered-critical
+ * list from coverage, and the pipeline trace. Nothing invented. */
+function rationalePanel(report, summary, cov, decision) {
+  const reasons = Array.isArray(report.reasons) ? report.reasons : [];
+  const heading = decision === "NO_GO" ? "Why this release is blocked"
+    : decision === "CONDITIONAL" ? "Why this release is conditional"
+    : decision === "GO" ? "Why this release is cleared"
+    : "Why no decision is available";
+
+  const lead = reasons.length
+    ? reasons[0]
+    : (report.aiQaExplanation
+      ? "The deterministic gate reported no blocking reasons. AI narrative context is shown below."
+      : "The deterministic gate reported no blocking reasons for this release.");
+
+  // Rule identifiers the gate itself cited (GATE-n / SEC-n / COV-n), de-duped.
+  const ruleIds = [...new Set([
+    ...(report.firedRule ? [report.firedRule] : []),
+    ...reasons.flatMap((r) => String(r).match(/\b(?:GATE|SEC|COV|REG)-\d+\b/g) || []),
+  ])];
+
+  const missing = [
+    ...((cov?.uncoveredCritical || []).map((id) => `${id} — critical criterion, no active test`)),
+    ...((report.missingScenarios || []).slice(0, 3)),
+  ];
+
+  const trace = Array.isArray(report.pipelineTrace) ? report.pipelineTrace : [];
+  const gateStep = [...trace].reverse().find((t) => /gate/.test(t.step || ""));
+
+  return `<div class="rationale">
+    <div class="rationale__head"><span class="ico">${ICONS.scale}</span><h3>${esc(heading)}</h3></div>
+    <p class="rationale__lead">${esc(lead)}</p>
+    <div class="rationale__cols">
+      <div>
+        <span class="eyebrow">${ruleIds.length > 1 ? "Applied gate rules" : "Applied gate rule"}</span>
+        ${ruleIds.length
+          ? `<div class="chips">${ruleIds.map((id) => `<span class="badge b-neutral mono">${esc(id)}</span>`).join("")}</div>`
+          : `<p class="muted">None recorded.</p>`}
+        ${gateStep?.detail ? `<p class="rationale__trace">Gate outcome: <span class="mono">${esc(formatTraceDetail(gateStep.detail))}</span></p>` : ""}
+      </div>
+      <div>
+        <span class="eyebrow">Missing / incomplete evidence</span>
+        ${missing.length
+          ? `<ul class="rationale__missing">${missing.map((m) => `<li>${ICONS.alert}<span>${esc(m)}</span></li>`).join("")}</ul>`
+          : `<p class="muted">No evidence gaps were recorded for this release.</p>`}
       </div>
     </div>
-    ${parts.join("\n")}
   </div>`;
 }
 
-/* ---- executive grid ---- */
-
-function metric(label, value, cls, hint, icon) {
-  return `<div class="metric metric--${cls}">
-    <span class="metric__label">${icon ? `<span class="metric__icon">${icon}</span>` : ""}${esc(label)}</span>
-    <span class="metric__value">${esc(value)}</span>
-    ${hint ? `<span class="metric__hint">${esc(hint)}</span>` : ""}
-  </div>`;
-}
-
-function execGrid(report, summary, cov, decision) {
+function execSection(report, summary, cov, decision) {
   const cr = summary?.changeRisk;
   const crCls = cr === "high" ? "danger" : cr === "medium" ? "warn" : cr ? "ok" : "muted";
+  const crArea = Array.isArray(report.identifiedRisks) && report.identifiedRisks[0]
+    ? displayArea(report.identifiedRisks[0].area) : "";
 
   const tc = summary?.testCoverage;
   const tcCls = tc === "insufficient" ? "danger" : tc ? "ok" : "muted";
-  const covHint = cov ? `${cov.coveragePercent}% of criteria with a passing test` : "";
+  const covSub = cov ? `${cov.coveragePercent}% of criteria with a passing test` : "No coverage data supplied";
 
   const sec = summary?.securityRisk;
-  const secCls = sec === "failed" ? "danger" : sec ? "ok" : "muted";
+  const secCls = sec === "failed" ? "danger" : sec === "passed" ? "ok" : "muted";
+  const secReasonCount = Array.isArray(summary?.securityReasons) ? summary.securityReasons.length : 0;
 
-  // A one-line, plain-language summary — taken verbatim from the deterministic
-  // gate's first reason (or a neutral statement when it reported none).
-  const firstReason = Array.isArray(report.reasons) && report.reasons.length
-    ? report.reasons[0]
-    : "The deterministic QA gate reported no blocking reasons for this release.";
-
-  const ringIcon = decision === "GO" ? ICONS.check : decision === "NO_GO" ? ICONS.x : decision === "CONDITIONAL" ? ICONS.alert : ICONS.dot;
-
-  return `<div class="exec-grid">
-    <div class="decision-box ${decisionClass(decision)}">
-      <div class="decision-ring" aria-hidden="true"><span class="decision-ring__icon">${ringIcon}</span></div>
-      <div class="decision-box__text">
-        <span class="decision-box__label">Release decision</span>
-        <span class="decision-box__value">${esc(decisionLabel(decision))}</span>
-        <span class="decision-box__meta">${report.firedRule ? `Deterministic gate · ${esc(report.firedRule)}` : "Deterministic QA gate"}</span>
-        <p class="decision-box__note">${esc(firstReason)}</p>
-      </div>
+  return `<section class="exec-grid">
+    ${decisionCard(report, decision)}
+    <div class="exec-grid__kpis">
+      ${kpiCard("Change risk", cr ? upper(cr) : kpiUnavailable("change"), crCls,
+        cr ? (crArea ? `Highest-risk area: ${crArea}` : "Based on affected areas and inherent risk") : "Adapter produced no findings", ICONS.gauge)}
+      ${kpiCard("Test coverage", tc ? upper(tc) : kpiUnavailable("coverage"), tcCls, covSub, ICONS.shield)}
+      ${kpiCard("Security risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : kpiUnavailable("security"), secCls,
+        sec === "failed" ? `${secReasonCount} deterministic check${secReasonCount === 1 ? "" : "s"} failed`
+          : sec === "passed" ? "Deterministic security checks passed" : "No security scan was supplied", ICONS.lock)}
     </div>
-    ${metric("Change risk", cr ? upper(cr) : "N/A", crCls, "Highest-risk area affected", ICONS.gauge)}
-    ${metric("Test coverage", tc ? upper(tc) : "N/A", tcCls, covHint, ICONS.shield)}
-    ${metric("Security risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : "N/A", secCls, "Security failure check", ICONS.lock)}
-  </div>`;
+    ${rationalePanel(report, summary, cov, decision)}
+  </section>`;
 }
 
-/* ---- risk signals (real identifiedRisks + regressionPriorities + defects + gate reasons; no invented scores) ---- */
+/* ---- risk register: identified risks + regression priorities + open defects,
+   one scannable table on desktop, stacked cards on mobile. No invented scores;
+   every field is a restatement of AI findings or deterministic QA data. ---- */
 
-/** One labelled, counted section per kind of signal — never a single flat
- * list. Identified risks, regression priorities and open defects are three
- * different questions ("what's risky", "what to retest", "what's already
- * broken"); folding them into one undifferentiated row list was the actual
- * source of the report reading as a dense, monotonous wall of near-identical
- * rows. */
-function riskGroup(icon, title, rows) {
-  if (!rows.length) return "";
-  return `<div class="risksig-group">
-    <div class="risksig-group__head">${icon}<span>${esc(title)}</span><span class="risksig-group__count">${rows.length}</span></div>
-    <div class="risksig-rows">${rows.map((r) => `
-      <div class="risksig-row">
-        <span class="risksig-row__area">${r.id ? `<span class="mono risksig-row__idtag">${esc(r.id)}</span> ` : ""}${esc(r.area)}</span>
-        ${badge(upper(r.level || "n/a"), r.cls)}
-        <span class="risksig-row__note">${r.note ? formatFreeText(r.note) : ""}</span>
-      </div>`).join("")}</div>
-  </div>`;
+function severityCell(level, cls) {
+  const l = String(level || "n/a").toLowerCase();
+  const icon = l === "critical" || l === "high" ? ICONS.alert : l === "medium" ? ICONS.target : ICONS.dot;
+  return `<span class="sev ${cls}">${icon}<span>${esc(upper(level || "n/a"))}</span></span>`;
 }
 
-function riskSignalsPanel(report, ctx) {
+function riskRegister(report, ctx) {
   const risks = Array.isArray(report.identifiedRisks) ? report.identifiedRisks : [];
   const regress = Array.isArray(report.regressionPriorities) ? report.regressionPriorities : [];
   const defects = Array.isArray(ctx.defects) ? ctx.defects : [];
-  const openDefects = defects.filter((d) => d && d.status === "open");
   const reasons = Array.isArray(report.reasons) ? report.reasons : [];
+  const reasonText = reasons.join(" ");
 
-  const riskRows = risks.map((r) => ({ area: displayArea(r.area), level: r.severity, cls: severityClass(r.severity), note: r.description }));
-  const regressRows = regress.map((p) => ({ area: displayArea(p.area), level: p.priority, cls: priorityClass(p.priority), note: p.rationale }));
-  const defectRows = openDefects.map((d) => ({ id: d.label || d.id, area: displayArea(d.area), level: d.severity, cls: severityClass(d.severity), note: d.description }));
+  const rows = [
+    ...risks.map((r) => ({
+      kind: "Risk", id: "", area: displayArea(r.area), level: r.severity, cls: severityClass(r.severity),
+      desc: r.description, status: "Identified", flagged: false,
+    })),
+    ...regress.map((p) => ({
+      kind: "Regression", id: "", area: displayArea(p.area), level: p.priority, cls: priorityClass(p.priority),
+      desc: p.rationale, status: "Retest priority", flagged: p.priority === "high",
+    })),
+    ...defects.map((d) => {
+      const id = d.label || d.id || "";
+      return {
+        kind: "Defect", id, area: displayArea(d.area), level: d.severity, cls: severityClass(d.severity),
+        desc: d.description, status: `${upper(d.status || "")}${d.security ? " · SECURITY" : ""}`,
+        flagged: id && reasonText.includes(id),
+      };
+    }),
+  ];
 
-  const hasAny = riskRows.length || regressRows.length || defectRows.length;
-  const body = hasAny
-    ? riskGroup(ICONS.alert, "Identified risks", riskRows)
-      + riskGroup(ICONS.target, "Regression priorities", regressRows)
-      + riskGroup(ICONS.bug, "Open defects", defectRows)
-    : `<p class="muted">No specific risk signals were identified from the submitted evidence.</p>`;
+  const blocking = rows.filter((r) => r.flagged).length;
 
-  const gateNote = reasons.length
-    ? `<div class="risksig-gate"><span class="eyebrow">Quality gate</span><ul class="bullets bullets--reason">${reasons.map((r) => `<li>${ICONS.scale}<span>${esc(r)}</span></li>`).join("")}</ul></div>`
-    : "";
+  const head = `<tr>
+    <th>Type / ID</th><th>Category</th><th>Severity</th><th>Description</th><th>Status</th>
+  </tr>`;
+  const body = rows.length ? rows.map((r) => `<tr class="${r.flagged ? "flagged" : ""}">
+    <td data-label="Type / ID"><span class="reg-kind">${esc(r.kind)}</span>${r.id ? `<span class="mono reg-id">${esc(r.id)}</span>` : ""}</td>
+    <td data-label="Category">${esc(r.area)}</td>
+    <td data-label="Severity">${severityCell(r.level, r.cls)}</td>
+    <td data-label="Description">${r.desc ? formatFreeText(r.desc) : `<span class="muted">—</span>`}</td>
+    <td data-label="Status">${badge(esc(r.status || "—"), r.flagged ? "b-high" : "b-neutral")}${r.flagged ? `<div class="reg-flag">Cited by the gate</div>` : ""}</td>
+  </tr>`).join("") : `<tr><td colspan="5" class="muted">No specific risk signals were identified from the submitted evidence.</td></tr>`;
 
   return `<section class="card card--risksig">
-    <div class="card__head"><span class="ico">${ICONS.gauge}</span><h2>Risk signals</h2><span class="hint">From AI analysis + deterministic QA data</span></div>
-    <div class="card__body">
-      ${body}
-      ${gateNote}
+    <div class="card__head">
+      <span class="ico">${ICONS.gauge}</span>
+      <h2>Risk signals &amp; open defects</h2>
+      <span class="card__counts">
+        <span>${rows.length} signal${rows.length === 1 ? "" : "s"}</span>
+        <span class="card__counts-sep">·</span>
+        <span class="${blocking ? "is-blocking" : ""}">${blocking} flagged by the gate</span>
+      </span>
+    </div>
+    <div class="card__body card__body--flush">
+      ${tableWrap(head, body)}
     </div>
   </section>`;
 }
@@ -276,6 +391,37 @@ function aiStagePanel(report, meta) {
   </section>`;
 }
 
+/* ---- status banner (semantic, generated from real gate data) ---- */
+
+function statusBanner(report, summary, decision) {
+  const reasons = Array.isArray(report.reasons) ? report.reasons : [];
+  if (decision === "GO") {
+    return `<div class="statusbar statusbar--ok" role="status">
+      <span class="statusbar__icon">${ICONS.check}</span>
+      <div class="statusbar__text">
+        <b>Release cleared by the deterministic gate</b>
+        <span>No blocking conditions were found in the submitted QA evidence.</span>
+      </div>
+    </div>`;
+  }
+  const conditional = decision === "CONDITIONAL";
+  const unavailable = !["GO", "NO_GO", "CONDITIONAL"].includes(decision);
+  const head = conditional ? "Release allowed with conditions"
+    : unavailable ? "No release decision could be produced"
+    : "Release blocked by the deterministic gate";
+  const sub = reasons.length
+    ? reasons.slice(0, 2).join(" ")
+    : "The deterministic QA gate did not return a clean decision, so it failed safe.";
+  return `<div class="statusbar ${conditional ? "statusbar--warn" : "statusbar--danger"}" role="alert">
+    <span class="statusbar__icon">${conditional ? ICONS.alert : ICONS.x}</span>
+    <div class="statusbar__text">
+      <b>${esc(head)}</b>
+      <span>${esc(sub)}</span>
+    </div>
+    ${report.firedRule ? `<span class="statusbar__rule mono">${esc(report.firedRule)}</span>` : ""}
+  </div>`;
+}
+
 /* ---- release history (this system has no cross-release historical store) ---- */
 
 function historyEmptyState() {
@@ -285,62 +431,65 @@ function historyEmptyState() {
   </div>`;
 }
 
-/* ---- release readiness (non-technical) ---- */
+/* ---- recommended next actions (grounded restatements only) ---- */
+
+function recommendationsCard(report) {
+  const actions = recommendedActions(report);
+  const items = actions.length
+    ? actions.map((a) => `<li>${ICONS.target}<span>${esc(a)}</span></li>`).join("")
+    : `<li>${ICONS.check}<span>No follow-up actions were derived from the submitted evidence.</span></li>`;
+  return `<section class="card card--actions">
+    <div class="card__head"><span class="ico">${ICONS.target}</span><h2>Recommended next actions</h2></div>
+    <div class="card__body">
+      <ul class="bullets bullets--action bullets--lg">${items}</ul>
+    </div>
+  </section>`;
+}
+
+/* ---- release readiness (evidence + security checks + decision authority) ---- */
 
 function readinessCard(report, summary, cov) {
   const reasons = Array.isArray(report.reasons) ? report.reasons : [];
-  const whyItems = reasons.length
-    ? reasons.map((r) => `<li>${ICONS.alert}<span>${esc(r)}</span></li>`).join("")
-    : `<li>${ICONS.check}<span>The deterministic gate reported no blocking reasons.</span></li>`;
+  const gateBlock = reasons.length
+    ? `<div class="readiness__sec">
+         <span class="eyebrow">Gate findings (deterministic)</span>
+         <ul class="bullets bullets--reason">${reasons.map((r) => `<li>${ICONS.scale}<span>${esc(r)}</span></li>`).join("")}</ul>
+       </div>`
+    : `<div class="readiness__sec"><p class="muted">The deterministic gate reported no blocking findings.</p></div>`;
 
-  // Surface the security-failure evidence from the QA rules even when a
-  // higher-precedence rule fired (so the "Security risk: FAIL" card is never
-  // shown without its supporting reasons).
   const secReasons = summary?.securityRisk === "failed" && Array.isArray(summary.securityReasons)
     ? summary.securityReasons : [];
   const secBlock = secReasons.length
-    ? `<div>
+    ? `<div class="readiness__sec">
          <span class="eyebrow">Security checks (deterministic QA rules)</span>
          <ul class="bullets bullets--reason">${secReasons.map((r) => `<li>${ICONS.shield}<span>${esc(r)}</span></li>`).join("")}</ul>
        </div>`
     : "";
 
-  const actions = recommendedActions(report);
-  const actionItems = actions.length
-    ? actions.map((a) => `<li>${ICONS.target}<span>${esc(a)}</span></li>`).join("")
-    : `<li>${ICONS.check}<span>No follow-up actions were derived from the submitted evidence.</span></li>`;
+  const covReasons = summary?.testCoverage === "insufficient" && Array.isArray(summary.coverageReasons)
+    ? summary.coverageReasons : [];
+  const covBlock = covReasons.length
+    ? `<div class="readiness__sec">
+         <span class="eyebrow">Coverage checks (deterministic QA rules)</span>
+         <ul class="bullets bullets--reason">${covReasons.map((r) => `<li>${ICONS.shield}<span>${esc(r)}</span></li>`).join("")}</ul>
+       </div>`
+    : "";
 
   const miniCards = cov ? `<div class="mini-cards">
     <div class="mini-card"><div class="mini-card__n">${cov.totalTests}</div><div class="mini-card__t">Test cases supplied</div></div>
     <div class="mini-card"><div class="mini-card__n">${cov.passed}</div><div class="mini-card__t">Passing</div></div>
     <div class="mini-card${cov.failed ? " mini-card--flag" : ""}"><div class="mini-card__n">${cov.failed}</div><div class="mini-card__t">Failing</div></div>
     <div class="mini-card${cov.uncoveredCritical?.length ? " mini-card--flag" : ""}"><div class="mini-card__n">${cov.uncoveredCritical?.length ?? 0}</div><div class="mini-card__t">Uncovered critical criteria</div></div>
-  </div>` : "";
+  </div>` : `<p class="muted">No coverage statistics were returned for this assessment.</p>`;
 
   return `<section class="card card--gate">
     <div class="card__head"><span class="ico">${ICONS.scale}</span><h2>Release readiness</h2><span class="lane lane--gate">Deterministic gate</span></div>
     <div class="card__body">
-      <div class="readiness">
-        <div class="decision-box ${decisionClass(report.releaseDecision)}">
-          <span class="decision-box__label">Decision</span>
-          <span class="decision-box__value">${esc(decisionLabel(report.releaseDecision))}</span>
-          <span class="decision-box__meta">${report.firedRule ? esc(report.firedRule) : ""}</span>
-        </div>
-        <div class="readiness__body">
-          ${miniCards}
-          <div class="readiness__explanation">
-            <div>
-              <span class="eyebrow">Why?</span>
-              <ul class="bullets bullets--reason">${whyItems}</ul>
-            </div>
-            ${secBlock}
-          </div>
-          <div class="readiness__actions">
-            <span class="eyebrow">Recommended next actions</span>
-            <ul class="bullets bullets--action">${actionItems}</ul>
-          </div>
-        </div>
-      </div>
+      <span class="eyebrow">Evidence summary</span>
+      ${miniCards}
+      ${gateBlock}
+      ${covBlock}
+      ${secBlock}
       <div class="authority">
         <span class="ico">${ICONS.info}</span>
         <p><b>This release decision was produced by the deterministic QA gate.</b>
@@ -600,6 +749,244 @@ function technicalAccordion(result, report, meta, mode) {
   </div>`;
 
   return accordion("technical", { icon: ICONS.flask, title: "Technical details", meta: `<span class="muted">Collapsed by default</span>` }, body);
+}
+
+/* ============================ dedicated PDF / print report ==================
+
+   A separate, print-optimised light-theme management report — NOT the dashboard
+   DOM restyled. It is hidden on screen (`.print-report{display:none}`) and is
+   the ONLY thing shown when the media is `print` (see styles.css @media print).
+   Every value is read from the same completed-assessment `result` the screen
+   report uses, so the two can never disagree.
+   ========================================================================== */
+
+function prKpi(label, value, tone, sub) {
+  return `<div class="pr-kpi pr-kpi--${tone}">
+    <span class="pr-kpi__label">${esc(label)}</span>
+    <span class="pr-kpi__value">${esc(value)}</span>
+    <span class="pr-kpi__sub">${esc(sub || "")}</span>
+  </div>`;
+}
+
+function prSeverity(level) {
+  const l = String(level || "n/a").toLowerCase();
+  const tone = l === "critical" || l === "high" ? "danger" : l === "medium" ? "warn" : l === "low" ? "ok" : "muted";
+  const mark = l === "critical" ? "▲▲" : l === "high" ? "▲" : l === "medium" ? "●" : l === "low" ? "▽" : "—";
+  return `<span class="pr-sev pr-sev--${tone}">${mark} ${esc(upper(level || "n/a"))}</span>`;
+}
+
+function printReport(result, report, summary, cov, ctx, meta, decision) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const genStamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const fileStamp = `${now.getFullYear()} ${pad(now.getMonth() + 1)} ${pad(now.getDate())}`;
+
+  const assessmentId = String(ctx.requirementId || report.dataProvenance?.requirementId || report.scenario || "—");
+  const assessmentName = String(ctx.releaseName || ctx.userStory || report.scenario || "Release assessment");
+  const shortName = assessmentName.length > 46 ? assessmentName.slice(0, 44) + "…" : assessmentName;
+  const reasons = Array.isArray(report.reasons) ? report.reasons : [];
+  const decClass = decisionClass(decision);
+  const decLabel = decisionLabel(decision);
+
+  const cr = summary?.changeRisk;
+  const tc = summary?.testCoverage;
+  const sec = summary?.securityRisk;
+  const crTone = cr === "high" ? "danger" : cr === "medium" ? "warn" : cr ? "ok" : "muted";
+  const tcTone = tc === "insufficient" ? "danger" : tc ? "ok" : "muted";
+  const secTone = sec === "failed" ? "danger" : sec === "passed" ? "ok" : "muted";
+
+  const actions = recommendedActions(report);
+
+  /* ---- page 1: executive release summary ---- */
+  const page1 = `
+    <div class="pr-hero pr-hero--${decClass}">
+      <div class="pr-hero__main">
+        <span class="pr-eyebrow">Deterministic release gate</span>
+        <span class="pr-hero__value">${esc(decLabel)}</span>
+        <span class="pr-hero__rule">${report.firedRule ? "Rule " + esc(report.firedRule) : "No rule identifier"}</span>
+      </div>
+      <div class="pr-hero__reason">
+        <span class="pr-eyebrow">Decision reason</span>
+        <p>${esc(reasons[0] || "The deterministic QA gate reported no blocking reasons for this release.")}</p>
+      </div>
+    </div>
+
+    <div class="pr-kpis">
+      ${prKpi("Change risk", cr ? upper(cr) : "Not calculated", crTone, cr ? "Inherent risk across affected areas" : "No adapter findings")}
+      ${prKpi("Test coverage", tc ? upper(tc) : "Not calculated", tcTone, cov ? cov.coveragePercent + "% criteria with a passing test" : "No coverage data")}
+      ${prKpi("Security risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : "Scan not provided", secTone,
+        sec === "failed" ? (summary.securityReasons?.length || 0) + " deterministic check(s) failed" : sec === "passed" ? "Deterministic checks passed" : "No security scan supplied")}
+    </div>
+
+    <h2 class="pr-h2">Top release blockers</h2>
+    ${reasons.length
+      ? `<ol class="pr-list">${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ol>`
+      : `<p class="pr-muted">The deterministic gate reported no blocking reasons.</p>`}
+
+    <h2 class="pr-h2">Recommended next actions</h2>
+    ${actions.length
+      ? `<ol class="pr-list">${actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ol>`
+      : `<p class="pr-muted">No follow-up actions were derived from the submitted evidence.</p>`}
+
+    <h2 class="pr-h2">Change under assessment</h2>
+    <p class="pr-para">${esc(report.changeSummary || ctx.releaseScope || "Not provided.")}</p>
+  `;
+
+  /* ---- page 2: risk & defect register ---- */
+  const reasonText = reasons.join(" ");
+  const regRows = [
+    ...(report.identifiedRisks || []).map((r) => ({
+      id: "RISK", cat: displayArea(r.area), sev: r.severity, desc: r.description, status: "Identified", gate: "—",
+    })),
+    ...(report.regressionPriorities || []).map((p) => ({
+      id: "REGRESS", cat: displayArea(p.area), sev: p.priority, desc: p.rationale, status: "Retest priority",
+      gate: p.priority === "high" ? "Elevated" : "—",
+    })),
+    ...(ctx.defects || []).map((d) => {
+      const id = d.label || d.id || "DEF";
+      return {
+        id, cat: displayArea(d.area), sev: d.severity, desc: d.description,
+        status: `${upper(d.status || "")}${d.security ? " / SECURITY" : ""}`,
+        gate: id && reasonText.includes(id) ? "Cited by gate" : "—",
+      };
+    }),
+  ];
+  const page2 = `
+    <p class="pr-para">${regRows.length} entr${regRows.length === 1 ? "y" : "ies"} — AI-identified risks, regression priorities and supplied defects.
+      Rows marked <b>Cited by gate</b> contributed to the deterministic decision.</p>
+    <table class="pr-table">
+      <thead><tr><th>Type / ID</th><th>Category</th><th>Severity</th><th>Description</th><th>Status</th><th>Gate relevance</th></tr></thead>
+      <tbody>
+        ${regRows.length ? regRows.map((r) => `<tr>
+          <td class="pr-mono">${esc(r.id)}</td>
+          <td>${esc(r.cat)}</td>
+          <td>${prSeverity(r.sev)}</td>
+          <td>${esc(r.desc || "—")}</td>
+          <td>${esc(r.status || "—")}</td>
+          <td>${esc(r.gate)}</td>
+        </tr>`).join("") : `<tr><td colspan="6" class="pr-muted">No risk signals were identified from the submitted evidence.</td></tr>`}
+      </tbody>
+    </table>
+  `;
+
+  /* ---- page 3: quality gate & test evidence ---- */
+  const uncovered = cov?.uncoveredCritical || [];
+  const failedRules = [...new Set([
+    ...(report.firedRule ? [report.firedRule] : []),
+    ...reasons.flatMap((r) => String(r).match(/\b(?:GATE|SEC|COV|REG)-\d+\b/g) || []),
+  ])];
+  const page3 = `
+    <table class="pr-table pr-table--kv">
+      <tbody>
+        <tr><th>Test cases supplied</th><td>${cov ? cov.totalTests : "—"}</td>
+            <th>Passing</th><td>${cov ? cov.passed : "—"}</td></tr>
+        <tr><th>Failing</th><td>${cov ? cov.failed : "—"}</td>
+            <th>Blocked / other</th><td>${cov ? (cov.blocked + (cov.other || 0)) : "—"}</td></tr>
+        <tr><th>Acceptance criteria</th><td>${cov ? cov.totalCriteria : "—"}</td>
+            <th>Criteria with a passing test</th><td>${cov ? cov.coveredCriteria : "—"}</td></tr>
+        <tr><th>Active coverage</th><td>${cov ? cov.coveragePercent + "%" : "—"}</td>
+            <th>Coverage verdict</th><td>${tc ? upper(tc) : "Not calculated"}</td></tr>
+      </tbody>
+    </table>
+
+    <h3 class="pr-h3">Uncovered critical criteria</h3>
+    ${uncovered.length
+      ? `<p class="pr-para pr-mono">${uncovered.map(esc).join(", ")}</p>`
+      : `<p class="pr-muted">None — every critical acceptance criterion has an active test.</p>`}
+
+    <h3 class="pr-h3">Failed deterministic rules</h3>
+    ${failedRules.length
+      ? `<p class="pr-para pr-mono">${failedRules.map(esc).join(", ")}</p>`
+      : `<p class="pr-muted">No deterministic rule was recorded as failed.</p>`}
+
+    <h3 class="pr-h3">Security checks</h3>
+    ${(summary?.securityReasons || []).length
+      ? `<ul class="pr-list">${summary.securityReasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>`
+      : `<p class="pr-muted">${sec === "passed" ? "Deterministic security checks passed." : "No security scan was supplied."}</p>`}
+
+    <h3 class="pr-h3">Coverage checks</h3>
+    ${(summary?.coverageReasons || []).length
+      ? `<ul class="pr-list">${summary.coverageReasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>`
+      : `<p class="pr-muted">No coverage rule was recorded as failed.</p>`}
+
+    <h3 class="pr-h3">Missing test scenarios</h3>
+    ${(report.missingScenarios || []).length
+      ? `<ul class="pr-list">${report.missingScenarios.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>`
+      : `<p class="pr-muted">No missing scenarios were derived from the submitted evidence.</p>`}
+  `;
+
+  /* ---- page 4: technical trace (appendix) ---- */
+  const prov = report.dataProvenance || result?.provenance || {};
+  const trace = report.pipelineTrace || [];
+  const page4 = `
+    <h3 class="pr-h3">Pipeline stages</h3>
+    <ol class="pr-list">${(meta.pipelineStages || []).map((s) => `<li>${esc(s)}</li>`).join("") || `<li class="pr-muted">Not recorded.</li>`}</ol>
+
+    <h3 class="pr-h3">Gate evaluation order</h3>
+    <p class="pr-para pr-mono">${(meta.evaluationOrder || []).map(esc).join(" → ") || "Not recorded."}</p>
+
+    <h3 class="pr-h3">MCP data tools</h3>
+    <p class="pr-para pr-mono">${(meta.mcpTools || []).map(esc).join(", ") || "Not recorded."}</p>
+
+    <h3 class="pr-h3">Pipeline trace</h3>
+    <table class="pr-table">
+      <thead><tr><th>Step</th><th>Result</th><th>Detail</th></tr></thead>
+      <tbody>${trace.length ? trace.map((t) => `<tr>
+        <td class="pr-mono">${esc(t.step)}</td>
+        <td>${t.ok === false ? "FAIL" : "OK"}</td>
+        <td>${esc(formatTraceDetail(t.detail || "—"))}</td>
+      </tr>`).join("") : `<tr><td colspan="3" class="pr-muted">No trace recorded.</td></tr>`}</tbody>
+    </table>
+
+    <h3 class="pr-h3">Data provenance</h3>
+    <table class="pr-table pr-table--kv"><tbody>
+      ${Object.keys(prov).length ? Object.entries(prov).map(([k, v]) =>
+        `<tr><th>${esc(humanizeKey(k))}</th><td colspan="3">${esc(String(v))}</td></tr>`).join("")
+        : `<tr><td class="pr-muted">No provenance recorded.</td></tr>`}
+    </tbody></table>
+
+    <h3 class="pr-h3">Decision authority</h3>
+    <p class="pr-para">${esc(report.decisionAuthority || "evaluateReleaseGate() (deterministic). The AI agent explains the risk; it does not decide.")}</p>
+  `;
+
+  const pages = [
+    { title: "Executive release summary", html: page1 },
+    { title: "Risk & defect register", html: page2 },
+    { title: "Quality gate & test evidence", html: page3 },
+    { title: "Technical trace", html: page4 },
+  ];
+  const total = pages.length;
+
+  const runHead = (title) => `<div class="pr-runhead">
+    <span class="pr-runhead__brand">AI QA Release Risk &amp; Test Strategy — Release Risk Report</span>
+    <span class="pr-runhead__id pr-mono">${esc(assessmentId)}</span>
+  </div>`;
+  const runFoot = (i) => `<div class="pr-runfoot">
+    <span>${esc(shortName)}</span>
+    <span>Confidential · Generated ${esc(genStamp)}</span>
+    <span>Section ${i} of ${total}</span>
+  </div>`;
+
+  return `<div class="print-report" role="document" aria-hidden="true">
+    <div class="pr-cover-note pr-muted">Suggested filename: Release Risk Report_${esc(assessmentId)}_${esc(fileStamp)}.pdf &nbsp;·&nbsp;
+      This report has ${total} numbered sections; each begins on a new page.</div>
+    ${pages.map((p, idx) => `<section class="pr-page">
+      ${runHead(p.title)}
+      <header class="pr-pagehead${idx === 0 ? " pr-pagehead--lead" : ""}">
+        <div class="pr-pagehead__id">
+          ${idx === 0
+            ? `<span class="pr-eyebrow">Release Risk Report</span>
+               <h1 class="pr-h1">${esc(assessmentName)}</h1>
+               <p class="pr-sub pr-mono">${esc(assessmentId)}${ctx.criticality ? " · " + esc(upper(ctx.criticality)) + " criticality" : ""} · Generated ${esc(genStamp)}</p>`
+            : `<span class="pr-eyebrow">Section ${idx + 1} of ${total}</span>
+               <h1 class="pr-h1 pr-h1--sm">${esc(p.title)}</h1>
+               <p class="pr-sub pr-mono">${esc(assessmentName)} · ${esc(assessmentId)}</p>`}
+        </div>
+      </header>
+      <div class="pr-body">${p.html}</div>
+      ${runFoot(idx + 1)}
+    </section>`).join("")}
+  </div>`;
 }
 
 /* -------------------------------- errors ----------------------------- */

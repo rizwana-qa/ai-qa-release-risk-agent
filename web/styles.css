@@ -6,64 +6,66 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 :root{
-  /* Deep Navy Modern — layered surface scale (background < panel < card <
-     elevated), each one step lighter, per the 80% neutral / 15% structural /
-     5% semantic balance. */
-  --navy-midnight:#07131F;
-  --navy-deep:#0B1D2D;
-  --surface-elevated:#10283D;
-  --surface-secondary:#132E45;
-  --border:#1D4058;
-  --border-soft:#193850;
+  /* Layered surface scale (background < sidebar/card < standard < elevated),
+     each step a deliberate contrast increment so grouping reads without relying
+     on borders alone. Values are the approved premium token set. */
+  --navy-midnight:#07131F;   /* app background */
+  --sidebar-bg:#0A1A29;      /* sidebar only */
+  --navy-deep:#10263A;       /* card / panel standard surface */
+  --surface-elevated:#153047;/* elevated surface (KPI tiles, inputs, chips) */
+  --surface-secondary:#122A3F;
+  --border:#29465D;          /* standard border */
+  --border-soft:#20384D;
 
-  /* Structural interactive blue — distinct from the semantic colors below;
-     this is the "15% structural" accent (buttons, links, focus, gate lane),
-     not a status color. */
-  --cobalt:#4F7FFF;
-  --cobalt-dim:#3a63d1;
-  --cobalt-tint:rgba(79,127,255,.14);
+  /* Primary action — violet-blue. Buttons, links, focus ring, gate lane. */
+  --cobalt:#7C83FF;
+  --cobalt-dim:#6a71f0;
+  --cobalt-hover:#9298FF;
+  --cobalt-tint:rgba(124,131,255,.15);
 
-  /* AI / Advisory — the one deliberate purple accent. Reserved for
-     AI-generated analysis/insight/recommendation; never decorative. */
+  /* AI / Advisory — the one deliberate purple accent. */
   --indigo:#8B7CF6;
-  --indigo-tint:rgba(139,124,246,.14);
+  --indigo-tint:rgba(139,124,246,.15);
   --ai:var(--indigo);
   --ai-tint:var(--indigo-tint);
 
-  --cyan:#39BFD9;
-  --cyan-tint:rgba(57,191,217,.14);
+  /* INFORMATION */
+  --cyan:#38BDF8;
+  --cyan-tint:rgba(56,189,248,.14);
 
-  /* SUCCESS — passed / covered / healthy / low risk / approved / complete. */
-  --emerald:#18B89A;
-  --emerald-tint:rgba(24,184,154,.14);
+  /* SUCCESS — passed / covered / low risk / cleared / complete. */
+  --emerald:#2DD4A8;
+  --emerald-tint:rgba(45,212,168,.14);
   --success:var(--emerald);
   --success-tint:var(--emerald-tint);
 
-  /* WARNING — below threshold / needs attention / medium risk / review. */
-  --amber:#F2B84B;
-  --amber-tint:rgba(242,184,75,.14);
+  /* WARNING — below threshold / medium risk / conditional. */
+  --amber:#FBBF24;
+  --amber-tint:rgba(251,191,36,.14);
   --warning:var(--amber);
   --warning-tint:var(--amber-tint);
 
-  /* CRITICAL — critical / failed / blocked / high risk. */
-  --coral:#EF6B73;
-  --coral-tint:rgba(239,107,115,.14);
-  --critical:var(--coral);
-  --critical-tint:var(--coral-tint);
+  /* DANGER / CRITICAL — failed / blocked / high / critical. */
+  --coral:#FB7185;
+  --coral-tint:rgba(251,113,133,.15);
+  --critical:#FF4D6D;
+  --critical-tint:rgba(255,77,109,.16);
 
-  --text-1:#F1F5F9;
-  --text-2:#94A9BB;
-  --text-3:#6d89a1; /* +0.07 lightness from #668197 -- the only reason for this change: WCAG AA requires 4.5:1 for standard text and the prior value measured 4.20:1 on --navy-deep. Smallest bump that clears it, same hue. */
+  --focus:#A78BFA;
+
+  --text-1:#F4F7FB;  /* primary */
+  --text-2:#B2C0CD;  /* secondary */
+  --text-3:#8496A8;  /* muted — cleared AA (>=4.5:1) on --navy-deep #10263A */
 
   --font-ui:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
   --font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
 
   --r-sm:8px; --r-md:11px; --r-lg:14px; --r-pill:999px;
   --shadow-1:0 1px 2px rgba(2,8,18,.4);
-  --shadow-2:0 8px 24px -8px rgba(2,8,18,.55);
+  --shadow-2:0 18px 40px -16px rgba(2,8,18,.65);
   --ease:cubic-bezier(.4,0,.2,1);
 
-  --sidebar-w:224px;
+  --sidebar-w:236px;
 }
 
 *{box-sizing:border-box;}
@@ -88,7 +90,7 @@ p{margin:0;}
 button{font-family:inherit;}
 a{color:inherit;}
 ::selection{background:var(--cobalt-tint);color:var(--text-1);}
-:focus-visible{outline:2px solid var(--cobalt);outline-offset:2px;border-radius:4px;}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px;}
 svg{display:block;}
 /* Guarantee the hidden attribute always wins, regardless of any class's own
    display rule tying with it in specificity (equal-specificity author rules
@@ -116,7 +118,7 @@ svg{display:block;}
 }
 
 .sidebar{
-  background:var(--navy-deep);
+  background:var(--sidebar-bg);
   border-right:1px solid var(--border);
   display:flex;flex-direction:column;
   padding:18px 14px;
@@ -156,11 +158,25 @@ svg{display:block;}
 
 .topbar{
   height:56px;flex:none;
-  background:var(--navy-deep);
+  background:var(--sidebar-bg);
   border-bottom:1px solid var(--border);
 }
 .topbar__inner{height:100%;display:flex;align-items:center;gap:14px;max-width:none;padding:0 24px;}
 .topbar__spacer{flex:1;}
+
+/* Hamburger — only present while the sidebar is a drawer (<=1024px). */
+.topbar__hamburger{
+  display:none;width:36px;height:36px;border-radius:var(--r-sm);flex:none;
+  background:var(--surface-elevated);border:1px solid var(--border);color:var(--text-1);
+  align-items:center;justify-content:center;cursor:pointer;
+}
+.topbar__hamburger:hover{border-color:#345572;}
+
+.drawer-overlay{
+  position:fixed;inset:0;z-index:50;background:rgba(4,10,18,.6);
+  opacity:0;transition:opacity 180ms var(--ease);
+}
+.app[data-drawer="open"] .drawer-overlay{opacity:1;}
 
 .topbar__menu{position:relative;}
 .topbar__menu-btn{
@@ -204,15 +220,13 @@ svg{display:block;}
 .flow__state{margin-left:auto;font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);}
 .flow__desc{font-size:11px;color:var(--text-3);}
 
-.flow__step[data-state="current"]{
-  background:var(--cobalt-tint);color:var(--text-1);
-  box-shadow:inset 0 0 0 1px rgba(79,127,255,.28);
-}
-.flow__step[data-state="current"] .flow__num{background:var(--cobalt);border-color:var(--cobalt);color:#fff;}
-.flow__step[data-state="current"] .flow__state{color:var(--cobalt);}
+.flow__step:hover:not([data-state="locked"]){background:var(--surface-secondary);color:var(--text-1);}
+
+.flow__step[data-state="current"]{color:var(--text-1);}
+.flow__step[data-state="current"] .flow__num{background:var(--surface-elevated);border-color:var(--cobalt);color:var(--text-1);}
 
 .flow__step[data-state="complete"]{color:var(--text-2);}
-.flow__step[data-state="complete"] .flow__num{background:var(--emerald-tint);border-color:rgba(45,212,168,.35);color:var(--emerald);}
+.flow__step[data-state="complete"] .flow__num{background:var(--emerald-tint);border-color:rgba(45,212,168,.4);color:var(--emerald);}
 .flow__step[data-state="complete"] .flow__state{color:var(--emerald);}
 .flow__step[data-state="complete"] .flow__digits{display:none;}
 .flow__step[data-state="complete"] .flow__num::after{
@@ -222,10 +236,21 @@ svg{display:block;}
 }
 
 .flow__step[data-state="available"]{color:var(--text-2);}
-.flow__step[data-state="available"] .flow__num{border-color:#2a4d72;color:var(--text-2);}
+.flow__step[data-state="available"] .flow__num{border-color:#345572;color:var(--text-2);}
 
-.flow__step[data-state="locked"]{color:var(--text-3);cursor:not-allowed;opacity:.55;}
+.flow__step[data-state="locked"]{color:var(--text-3);cursor:not-allowed;opacity:.5;}
 .flow__step[data-state="locked"]:hover{background:none;}
+
+/* Active stage — a filled violet surface, applied on top of any completion
+   check so a stage can read as both "done" and "where you are". */
+.flow__step[data-active="true"]{
+  background:var(--cobalt-tint);color:var(--text-1);
+  box-shadow:inset 0 0 0 1px var(--cobalt);
+}
+.flow__step[data-active="true"] .flow__num{background:var(--cobalt);border-color:var(--cobalt);color:#0b1020;}
+.flow__step[data-active="true"][data-state="complete"] .flow__num::after{border-color:#0b1020;}
+.flow__step[data-active="true"] .flow__label{font-weight:600;}
+.flow__step[data-active="true"] .flow__state{color:var(--cobalt);}
 
 .flow__compact{display:none;}
 
@@ -240,8 +265,8 @@ svg{display:block;}
 }
 .btn svg{width:15px;height:15px;}
 .btn:active{transform:translateY(1px);}
-.btn--primary{background:var(--cobalt);color:#fff;}
-.btn--primary:hover{background:var(--cobalt-dim);}
+.btn--primary{background:var(--cobalt);color:#0b1020;}
+.btn--primary:hover{background:var(--cobalt-hover);}
 .btn--primary:disabled{background:var(--surface-secondary);color:var(--text-3);cursor:not-allowed;}
 .btn--ghost{background:var(--navy-deep);color:var(--text-2);border-color:var(--border);}
 .btn--ghost:hover{color:var(--text-1);border-color:#2a4d72;}
@@ -312,73 +337,131 @@ svg{display:block;}
 .card--gate .card__head .ico{color:var(--cobalt);}
 .card--risksig .card__head .ico{color:var(--cyan);}
 
-/* ---------------------------- exec grid / hero decision -------------------- */
+/* ---------------------------- status banner ------------------------------- */
+
+.statusbar{
+  display:flex;align-items:center;gap:14px;
+  border:1px solid var(--border);border-left-width:4px;border-radius:var(--r-md);
+  padding:14px 18px;margin-bottom:16px;background:var(--navy-deep);
+}
+.statusbar__icon{
+  width:30px;height:30px;border-radius:8px;flex:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.statusbar__icon svg{width:17px;height:17px;}
+.statusbar__text{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.statusbar__text b{font-size:14px;color:var(--text-1);font-weight:700;}
+.statusbar__text span{font-size:12.5px;color:var(--text-2);}
+.statusbar__rule{
+  margin-left:auto;flex:none;font-size:11px;font-weight:700;color:var(--text-2);
+  background:var(--surface-elevated);border:1px solid var(--border);border-radius:6px;padding:3px 9px;
+}
+.statusbar--danger{border-left-color:var(--critical);}
+.statusbar--danger .statusbar__icon{background:var(--critical-tint);color:var(--critical);}
+.statusbar--warn{border-left-color:var(--amber);}
+.statusbar--warn .statusbar__icon{background:var(--amber-tint);color:var(--amber);}
+.statusbar--ok{border-left-color:var(--emerald);}
+.statusbar--ok .statusbar__icon{background:var(--emerald-tint);color:var(--emerald);}
+
+/* ---------------------------- executive decision grid --------------------- */
 
 .exec-grid{
-  display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px;
+  display:grid;
+  grid-template-columns:minmax(0,4fr) minmax(0,8fr);
+  grid-template-rows:auto 1fr;
+  gap:14px;margin-bottom:16px;
 }
+.exec-grid > .decision-box{grid-column:1;grid-row:1 / span 2;}
+.exec-grid > .exec-grid__kpis{grid-column:2;grid-row:1;}
+.exec-grid > .rationale{grid-column:2;grid-row:2;}
+.exec-grid__kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;}
+
 .decision-box{
-  grid-row:1 / 3;min-width:0;
-  background:var(--navy-deep);border:1px solid var(--border);border-radius:var(--r-lg);
-  padding:22px;display:flex;gap:18px;align-items:center;
+  min-width:0;display:flex;flex-direction:column;gap:6px;
+  background:linear-gradient(180deg,var(--surface-elevated),var(--navy-deep));
+  border:1px solid var(--border);border-radius:var(--r-lg);padding:22px;
 }
-.decision-ring{
-  width:64px;height:64px;border-radius:50%;flex:none;
+.decision-box__authority{
+  margin-top:auto;padding-top:14px;border-top:1px solid var(--border);
+  font-size:11px;color:var(--text-3);line-height:1.5;
+}
+.decision-box__ring{
+  width:52px;height:52px;border-radius:14px;flex:none;margin-bottom:6px;
   display:flex;align-items:center;justify-content:center;
-  border:3px solid var(--border);
+  border:1px solid var(--border);background:var(--navy-deep);
 }
-.decision-ring__icon{width:26px;height:26px;}
-.decision-box.d-go .decision-ring{border-color:var(--emerald);background:var(--emerald-tint);color:var(--emerald);}
-.decision-box.d-no-go .decision-ring{border-color:var(--coral);background:var(--coral-tint);color:var(--coral);}
-.decision-box.d-conditional .decision-ring{border-color:var(--amber);background:var(--amber-tint);color:var(--amber);}
-.decision-box.d-unavailable .decision-ring{border-color:var(--border);color:var(--text-3);}
+.decision-box__ring svg{width:24px;height:24px;}
+.decision-box__label{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text-3);}
+.decision-box__value{font-family:var(--font-ui);font-size:38px;font-weight:800;letter-spacing:-.02em;line-height:1.05;}
+.decision-box__meta{font-size:12px;color:var(--text-2);font-weight:600;}
+.decision-box__meta .mono{color:var(--text-1);}
+.decision-box__blockers{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);}
+.decision-box__blockers ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:7px;}
+.decision-box__blockers li{display:flex;gap:7px;align-items:flex-start;font-size:12px;color:var(--text-2);line-height:1.45;}
+.decision-box__blockers li svg{width:12px;height:12px;flex:none;margin-top:3px;}
 
-.decision-box__text{display:flex;flex-direction:column;gap:3px;min-width:0;}
-.decision-box__label{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3);}
-.decision-box__value{font-family:var(--font-ui);font-size:30px;font-weight:800;letter-spacing:-.01em;line-height:1.1;}
+.decision-box.d-go .decision-box__ring{border-color:var(--emerald);background:var(--emerald-tint);color:var(--emerald);}
 .decision-box.d-go .decision-box__value{color:var(--emerald);}
-.decision-box.d-no-go .decision-box__value{color:var(--coral);}
+.decision-box.d-no-go .decision-box__ring{border-color:var(--critical);background:var(--critical-tint);color:var(--critical);}
+.decision-box.d-no-go .decision-box__value{color:var(--critical);}
+.decision-box.d-no-go .decision-box__blockers li svg{color:var(--critical);}
+.decision-box.d-conditional .decision-box__ring{border-color:var(--amber);background:var(--amber-tint);color:var(--amber);}
 .decision-box.d-conditional .decision-box__value{color:var(--amber);}
+.decision-box.d-conditional .decision-box__blockers li svg{color:var(--amber);}
+.decision-box.d-unavailable .decision-box__ring{color:var(--text-3);}
 .decision-box.d-unavailable .decision-box__value{color:var(--text-3);}
-.decision-box__meta{font-size:11.5px;color:var(--text-2);font-weight:600;}
-.decision-box__note{font-size:12.5px;color:var(--text-2);margin-top:2px;max-width:52ch;}
 
-.metric{
-  min-width:0;
+.kpi{
+  min-width:0;display:flex;flex-direction:column;gap:7px;
   background:var(--surface-elevated);border:1px solid var(--border);border-radius:var(--r-md);
-  padding:14px 16px;display:flex;flex-direction:column;gap:4px;
+  padding:15px 16px;
 }
-.metric__label{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-3);display:inline-flex;align-items:center;gap:6px;}
-.metric__icon{width:13px;height:13px;flex:none;display:inline-flex;}
-.metric__icon svg{width:13px;height:13px;}
-.metric__value{font-family:var(--font-mono);font-size:19px;font-weight:600;letter-spacing:-.01em;}
-.metric__hint{font-size:11px;color:var(--text-3);}
-.metric--ok .metric__value{color:var(--emerald);}
-.metric--warn .metric__value{color:var(--amber);}
-.metric--danger .metric__value{color:var(--coral);}
-.metric--muted .metric__value{color:var(--text-3);}
+.kpi__label{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--text-3);display:inline-flex;align-items:center;gap:6px;}
+.kpi__icon{width:13px;height:13px;flex:none;display:inline-flex;color:var(--text-2);}
+.kpi__icon svg{width:13px;height:13px;}
+.kpi__value{font-family:var(--font-ui);font-size:21px;font-weight:800;letter-spacing:-.01em;line-height:1.05;}
+.kpi__sub{font-size:11px;color:var(--text-3);line-height:1.4;}
+.kpi--ok .kpi__value{color:var(--emerald);}
+.kpi--warn .kpi__value{color:var(--amber);}
+.kpi--danger .kpi__value{color:var(--critical);}
+.kpi--muted .kpi__value{color:var(--text-2);font-size:15px;font-weight:700;}
 
-/* ---------------------------- risk signals panel --------------------------- */
+.rationale{
+  background:var(--navy-deep);border:1px solid var(--border);border-radius:var(--r-lg);
+  padding:20px;display:flex;flex-direction:column;gap:14px;height:100%;
+}
+.rationale__head{display:flex;align-items:center;gap:9px;}
+.rationale__head .ico{width:16px;height:16px;color:var(--cobalt);flex:none;}
+.rationale__head h3{font-size:15px;font-weight:700;color:var(--text-1);}
+.rationale__lead{font-size:13px;color:var(--text-1);line-height:1.55;}
+.rationale__cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:18px;}
+.rationale__trace{font-size:11.5px;color:var(--text-3);margin-top:8px;}
+.rationale__missing{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px;}
+.rationale__missing li{display:flex;gap:7px;align-items:flex-start;font-size:12px;color:var(--text-2);line-height:1.45;}
+.rationale__missing li svg{width:13px;height:13px;flex:none;margin-top:2px;color:var(--amber);}
+.rationale__all{border-top:1px solid var(--border);padding-top:14px;}
 
-.risksig-group + .risksig-group{margin-top:20px;padding-top:20px;border-top:1px solid var(--border);}
-.risksig-group__head{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
-.risksig-group__head svg{width:15px;height:15px;color:var(--text-3);flex:none;}
-.risksig-group__head span:first-of-type{font-size:12.5px;font-weight:700;color:var(--text-1);}
-.risksig-group__count{
-  font-size:10.5px;font-weight:700;color:var(--text-3);background:var(--surface-elevated);
-  border:1px solid var(--border);border-radius:var(--r-pill);padding:1px 7px;
+/* ---------------------------- risk register ------------------------------- */
+
+.card__counts{
+  margin-left:auto;display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap;
+  font-size:11px;font-weight:600;color:var(--text-3);
 }
-.risksig-rows{display:flex;flex-direction:column;}
-.risksig-row{
-  display:grid;grid-template-columns:220px 90px 1fr;align-items:start;gap:14px;
-  padding:13px 0;
-}
-.risksig-row + .risksig-row{border-top:1px solid var(--border-soft);}
-.risksig-row .badge{min-width:66px;justify-content:center;}
-.risksig-row__area{display:block;font-size:13px;font-weight:600;color:var(--text-1);}
-.risksig-row__idtag{color:var(--text-3);font-weight:600;font-size:11.5px;}
-.risksig-row__note{font-size:12.5px;color:var(--text-2);}
-.risksig-gate{border-top:1px solid var(--border);margin-top:14px;padding-top:14px;}
+.card__counts .is-blocking{color:var(--critical);}
+.card__counts-sep{opacity:.5;}
+.card__body--flush{padding:0;}
+.card__body--flush .tablewrap{border:none;border-radius:0;border-top:1px solid var(--border);}
+
+.sev{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:.02em;white-space:nowrap;}
+.sev svg{width:13px;height:13px;flex:none;}
+.sev.b-critical,.sev.b-high{color:var(--critical);}
+.sev.b-medium{color:var(--amber);}
+.sev.b-low{color:var(--emerald);}
+.sev.b-neutral{color:var(--text-3);}
+
+.reg-kind{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);}
+.reg-id{display:block;font-size:12px;color:var(--text-1);margin-top:2px;}
+.reg-flag{font-size:10.5px;font-weight:600;color:var(--critical);margin-top:4px;}
 
 /* ---------------------------- AI stage panel -------------------------------- */
 
@@ -406,35 +489,25 @@ svg{display:block;}
 
 /* ---------------------------- readiness card -------------------------------- */
 
-.readiness{display:flex;gap:20px;}
-.readiness .decision-box{grid-row:auto;flex:none;width:220px;flex-direction:column;align-items:flex-start;}
-.readiness__body{flex:1;display:flex;flex-direction:column;gap:16px;min-width:0;}
-/* Recommended actions is the terminal step in the Decision -> Evidence ->
-   Explanation -> Actions reading order -- a border/margin step-down marks it
-   as the distinct "what to do" takeaway instead of blending into the
-   why/security-check explanation blocks above it. */
-.readiness__actions{margin-top:4px;padding-top:16px;border-top:1px solid var(--border);}
-/* Evidence (mini-cards) -> Explanation (why/security) is the other seam in
-   the Decision -> Evidence -> Explanation -> Actions order that had no
-   visual break -- same treatment as .readiness__actions so all three later
-   layers read as distinct steps, not one undifferentiated block. */
-.readiness__explanation{display:flex;flex-direction:column;gap:16px;margin-top:4px;padding-top:16px;border-top:1px solid var(--border);}
+.readiness__sec{margin-top:16px;padding-top:16px;border-top:1px solid var(--border);}
+.card--gate .card__body > .eyebrow{margin-bottom:10px;}
 
 .bullets{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
-.bullets li{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text-2);}
+.bullets li{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text-2);line-height:1.5;}
 .bullets svg{width:15px;height:15px;flex:none;margin-top:1px;color:var(--text-3);}
 .bullets--reason svg{color:var(--amber);}
 .bullets--action svg{color:var(--cobalt);}
+.bullets--lg li{font-size:13.5px;color:var(--text-1);}
 
 .mini-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
 .mini-card{
   background:var(--surface-elevated);border:1px solid var(--border);border-radius:var(--r-md);
   padding:12px 14px;
 }
-.mini-card__n{font-family:var(--font-mono);font-size:20px;font-weight:600;color:var(--text-1);}
+.mini-card__n{font-family:var(--font-ui);font-size:22px;font-weight:800;color:var(--text-1);}
 .mini-card__t{font-size:11px;color:var(--text-3);margin-top:2px;}
-.mini-card--flag{border-color:rgba(241,107,112,.35);background:var(--coral-tint);}
-.mini-card--flag .mini-card__n{color:var(--coral);}
+.mini-card--flag{border-color:rgba(255,77,109,.4);background:var(--critical-tint);}
+.mini-card--flag .mini-card__n{color:var(--critical);}
 
 .authority{
   display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);
@@ -553,10 +626,20 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
 
 /* ---------------------------- report header ----------------------------------- */
 
-.report__head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px;}
-.report__head h1{font-size:22px;font-weight:700;max-width:60ch;}
-.report__subtitle{font-size:13px;color:var(--text-2);margin-top:6px;max-width:60ch;}
-.report__actions{display:flex;gap:8px;flex:none;}
+.report__head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:20px;
+  margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--border);
+}
+.report__ident{min-width:0;}
+.report__idline{margin:6px 0 4px;}
+.report__idtag{
+  font-size:11px;font-weight:600;color:var(--text-2);letter-spacing:.02em;
+  background:var(--surface-elevated);border:1px solid var(--border);border-radius:6px;padding:2px 8px;
+}
+.report__head h1{font-size:23px;font-weight:800;letter-spacing:-.01em;max-width:46ch;line-height:1.25;overflow-wrap:anywhere;}
+.report__subtitle{font-size:12.5px;color:var(--text-2);margin-top:8px;max-width:64ch;line-height:1.5;}
+.report__actions{display:flex;gap:10px;flex:none;flex-wrap:wrap;justify-content:flex-end;}
+.report__actions .btn{height:38px;}
 
 /* ---------------------------- processing view --------------------------------- */
 
@@ -727,185 +810,185 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
 
 .app-main{padding-top:24px;padding-bottom:8px;}
 
-/* ---------------------------- print -------------------------------------------- */
-
-@media print{
-  /* This app is themed entirely off these custom properties (dozens of
-     components read var(--text-2), var(--surface-elevated), etc. directly).
-     Redefining the tokens once, here, is what actually makes every card,
-     table, badge and accordion print-legible — patching each component's
-     class individually missed real instances (e.g. .mini-card__n reads
-     --text-1, so a card forced to a white background but not this token
-     still prints an invisible near-white number on white paper). */
-  :root{
-    --navy-midnight:#ffffff;
-    --navy-deep:#ffffff;
-    --surface-elevated:#f1f4f8;
-    --surface-secondary:#eaeef3;
-    --border:#d2dae3;
-    --border-soft:#e2e8ef;
-    --text-1:#0a0a0a;
-    --text-2:#33404f;
-    --text-3:#57687c;
-  }
-  /* Chrome's print dialog can inject its own "localhost:8080" + date
-     header/footer into the printed margin area -- that text comes from
-     the browser's "Headers and footers" print option, never from this
-     page's own HTML (verified: the string "localhost" does not appear
-     anywhere in this app's rendered output). Explicit @page margins are
-     the one thing CSS can actually do about it: Chrome only draws its
-     own header/footer text inside the page margin it reserves, and a
-     page-authored margin claims that space instead. This isn't a
-     guaranteed override in every Chrome version, but it's the strongest
-     code-level lever available -- the fully reliable fix is still the
-     dialog's own toggle (Print / PDF -> More settings -> Headers and
-     footers -> off). */
-  @page{margin:16mm 14mm;}
-
-  body{background:#fff;color:#0a0a0a;}
-  .sidebar, .topbar, .sitefoot, .report__actions, .acc__meta .chev{display:none !important;}
-  .app{display:block;}
-  .acc__body{max-height:none !important;}
-  .card, .acc, .decision-box, .metric, .mini-card, .row, .item{box-shadow:none;}
-  .acc.card--ai .acc__head{background:none;}
-  .card, .acc, .card--ai, .card--gate, .decision-box, .metric, .mini-card, .row, .item{
-    background:#fff !important;
-  }
-  .card, .acc, .decision-box, .metric, .mini-card, .row, .item, .tablewrap, table.data th{
-    break-inside:avoid;
-  }
-
-  /* The product masthead lives only in the sidebar, which print correctly
-     hides — without this the printed report has no branding at all. Reusing
-     the same product name as plain generated content (no new data, nothing
-     the report itself doesn't already say) keeps the PDF recognizably part
-     of the product while staying print-economical (text + one rule, no
-     dark fill). */
-  .report__head{display:block;border-bottom:2px solid var(--cobalt);padding-bottom:14px;}
-  .report__head::before{
-    content:"AI QA Release Risk & Test Strategy";
-    display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-    color:var(--cobalt);margin-bottom:10px;
-  }
-  .card__head, .acc__head{border-bottom:2px solid #94A3B8;}
-
-  /* Every one of these borders is written as a low-alpha rgba() tuned to
-     glow softly against the dark navy screen background. Composited over
-     white instead, that same alpha washes out to a barely-visible pale
-     tint -- exactly the "blurry/transparent border" problem. Converting
-     each to the same token at full, solid opacity keeps every severity/
-     status color exactly consistent with its screen meaning, just crisp
-     on paper. Scoped to the handful of selectors that actually render
-     inside the printed report (badges, banners, lane tags, decision-trace
-     dots, the final-decision bar) -- live-UI-only elements untouched. */
-  .b-low, .b-cov{border-color:var(--emerald);}
-  .b-medium{border-color:var(--amber);}
-  .b-high, .b-notcov, .b-critical{border-color:var(--coral);}
-  .b-security{border-color:var(--indigo);}
-  .lane--ai{border-color:var(--indigo);}
-  .lane--gate{border-color:var(--cobalt);}
-  .mini-card--flag{border-color:var(--coral);}
-  .banner{border-color:var(--coral);}
-  .banner--warn{border-color:var(--amber);}
-  .banner--info{border-color:var(--cobalt);}
-  .tdot--ai{border-color:var(--indigo);}
-  .tdot--gate{border-color:var(--cobalt);}
-  .tdot--ok{border-color:var(--emerald);}
-  .tdot--fail{border-color:var(--coral);}
-  .tfinal.d-go{border-color:var(--emerald);}
-  .tfinal.d-no-go{border-color:var(--coral);}
-  .tfinal.d-conditional{border-color:var(--amber);}
-  .tablewrap{border-color:#94A3B8;}
-
-  /* Table headers read as merely outlined (light-gray fill, slate text) --
-     a filled dark-navy header with white text is the one place this report
-     borrows the web app's own navy fill deliberately, and it applies to
-     every table.data instance uniformly (coverage, defects, regression,
-     provenance, pipeline trace) since they all share this one selector. */
-  table.data th{background:#0B2233;color:#ffffff;border-bottom-color:#0B2233;}
-
-  /* Risk Signals' three sub-groups (Identified risks/Regression priorities/
-     Open defects) currently have no enclosing border at all in print --
-     only a top divider between them. Give each its own light bordered box
-     for the same "visible container" treatment already used by cards,
-     KPIs and tables everywhere else in the report. */
-  .risksig-group{border:1px solid #C9D5DF;border-radius:8px;padding:14px 16px;}
-  .risksig-group + .risksig-group{margin-top:16px;padding-top:14px;border-top:1px solid #C9D5DF;}
-  .risksig-group__head{margin-bottom:8px;}
-
-  /* Print-specific type scale -- a screen-optimized 13.5-15px section title
-     reads fine on a backlit display at arm's length but is small on a
-     printed page. Bumping just these three for print only. */
-  .report__head h1{font-size:28px;}
-  .card__head h2, .acc__head h3{font-size:18px;}
-  .decision-box__value{font-size:34px;}
-
-  /* Print-only executive reading order: Decision/KPIs -> Risk -> Release
-     Readiness (decision + evidence + why + actions) -> AI risk narrative ->
-     supporting evidence tables -> methodology -> appendix. This is a pure
-     re-sequencing of the exact same sections already in the DOM (no content
-     added, removed or duplicated) -- .report only becomes a flex column
-     here, inside @media print, so the on-screen interactive order is
-     completely unaffected. */
-  .report{display:flex;flex-direction:column;}
-  .report__head{order:1;}
-  .report > .banner{order:2;}
-  .report > .exec-grid{order:3;}
-  .report > .card--risksig{order:4;}
-  .report > .card--gate{order:5;}
-  .report > .acc[data-acc="risky"]{order:6;}
-  .report > .acc[data-acc="coverage"]{order:7;}
-  .report > .acc[data-acc="defects"]{order:8;}
-  .report > .acc[data-acc="regression"]{order:9;}
-  .report > .acc[data-acc="missing"]{order:10;}
-  .report > .acc[data-acc="ai"]{order:11;}
-  .report > section.card.card--ai:not(.acc){order:12;}
-  .report > .hist-empty{order:13;}
-  .report > .acc[data-acc="trace"]{order:14;}
-  .report > .acc[data-acc="technical"]{order:15;}
-}
-
 /* ---------------------------- responsive ---------------------------------------- */
 
-@media (max-width:1180px){
-  .exec-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
-  .decision-box{grid-row:auto;grid-column:1 / -1;}
-  .readiness{flex-direction:column;}
-  .readiness .decision-box{width:auto;}
-  .risksig-row{grid-template-columns:1fr;row-gap:4px;}
+/* Tablet landscape / small desktop: the 4|8 decision grid stacks. */
+@media (max-width:1120px){
+  .exec-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;}
+  .exec-grid > .decision-box,
+  .exec-grid > .exec-grid__kpis,
+  .exec-grid > .rationale{grid-column:1;grid-row:auto;}
+  .rationale{height:auto;}
+  .report__head{flex-direction:column;}
+  .report__actions{justify-content:flex-start;}
 }
 
-@media (max-width:960px){
-  :root{--sidebar-w:64px;}
-  .sidebar{align-items:center;padding:16px 8px;}
-  .topbar__names, .flow__label, .flow__state, .flow__desc{display:none;}
-  .flow__step{justify-content:center;padding:8px;}
+/* Sidebar becomes an off-canvas drawer. */
+@media (max-width:1024px){
+  .app{grid-template-columns:1fr;}
+  .sidebar{
+    position:fixed;top:0;bottom:0;left:0;z-index:60;
+    width:min(82vw,300px);overflow-y:auto;
+    transform:translateX(-100%);transition:transform 200ms var(--ease);
+  }
+  .app[data-drawer="open"] .sidebar{transform:none;box-shadow:var(--shadow-2);}
+  .topbar__hamburger{display:flex;}
+  .topbar__inner{padding:0 16px;gap:10px;}
+  /* The full product name lives in the drawer at these widths; the topbar keeps
+     just the mark + hamburger so the actions never get pushed off-screen. */
+  .topbar__names{display:none;}
+  .btn--relaunch__label{display:none;}
+  .btn--relaunch{width:34px;padding:0;}
   .grid-2{grid-template-columns:1fr;}
+  .exec-grid__kpis{grid-template-columns:repeat(3,minmax(0,1fr));}
   .stats, .mini-cards, .evstats{grid-template-columns:repeat(2,1fr);}
 }
 
-@media (max-width:680px){
+@media (max-width:720px){
   .container{padding:0 16px;}
-  .topbar__inner{padding:0 16px;}
-  .exec-grid{grid-template-columns:minmax(0,1fr);}
-  .stats, .mini-cards, .evstats{grid-template-columns:1fr 1fr;}
+  .exec-grid__kpis{grid-template-columns:minmax(0,1fr);}
+  .kpi{min-height:0;}
+  .statusbar{flex-wrap:wrap;}
+  .statusbar__rule{margin-left:44px;}
   .kv{grid-template-columns:1fr;}
   .kv dt{margin-top:8px;}
-  .report__head{flex-direction:column;}
-  .decision-box{flex-direction:column;align-items:flex-start;text-align:left;}
+  .card__head{gap:8px;}
+  .card__counts{margin-left:0;flex-basis:100%;}
+  .rationale__cols{grid-template-columns:minmax(0,1fr);gap:14px;}
 
-  /* table.data relies on horizontal scroll (.tablewrap{overflow-x:auto}) at
-     desktop widths, but that leaves the Detail/Value columns hidden behind a
-     swipe by default on a phone — stack each row into label:value blocks
-     instead, using the data-label each <td> already carries. */
+  /* table.data relies on horizontal scroll at desktop widths; stack each row
+     into label:value blocks on a phone using the data-label each <td> carries. */
   table.data, table.data thead, table.data tbody, table.data tr, table.data th, table.data td{display:block;}
   table.data thead{display:none;}
   .tablewrap{overflow-x:visible;}
-  table.data tr{padding:11px 14px;border-bottom:1px solid var(--border-soft);}
+  .card__body--flush .tablewrap{border-top:none;}
+  table.data tr{padding:12px 16px;border-bottom:1px solid var(--border-soft);}
   table.data tr:last-child{border-bottom:none;}
+  table.data tr.flagged td{background:none;}
+  table.data tr.flagged{border-left:3px solid var(--critical);}
   table.data td{padding:4px 0;border-bottom:none;white-space:normal;}
   table.data td[data-label]::before{
     content:attr(data-label);display:block;font-size:10px;font-weight:700;
     letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);margin-bottom:2px;
   }
+}
+
+@media (max-width:380px){
+  .decision-box__value{font-size:32px;}
+  .report__head h1{font-size:20px;}
+  .btn{padding:0 12px;}
+  .report__actions{width:100%;}
+  .report__actions .btn{flex:1;}
+}
+
+/* ---------------------------- print / PDF ------------------------------------- */
+
+/* The dedicated management PDF layer. On screen it is inert and hidden; when the
+   media is `print` the on-screen dashboard is removed entirely and only
+   `.print-report` renders, in its own self-contained light theme. */
+.print-report{display:none;}
+
+@media screen{ .print-report{display:none !important;} }
+
+@media print{
+  @page{size:A4 portrait;margin:14mm 13mm;}
+  html,body{background:#fff !important;}
+
+  /* Remove the entire application chrome and the on-screen report. */
+  .topbar, .sidebar, .sitefoot, .drawer-overlay,
+  .report > *:not(.print-report){display:none !important;}
+  .app, .shell-main, .app-main, main.container, #view{
+    display:block !important;margin:0 !important;padding:0 !important;
+    max-width:none !important;width:auto !important;background:#fff !important;
+  }
+  .report{display:block !important;}
+  .print-report{display:block !important;}
+
+  .print-report{
+    color:#1f2937;
+    font-family:var(--font-ui);font-size:10.5pt;line-height:1.5;
+    -webkit-print-color-adjust:exact;print-color-adjust:exact;
+  }
+  .print-report *{box-sizing:border-box;}
+  .pr-cover-note{font-size:8pt;color:#94a3b8;margin-bottom:6mm;}
+
+  .pr-page{break-after:page;}
+  .pr-page:last-child{break-after:auto;}
+
+  .pr-runhead{
+    display:flex;justify-content:space-between;align-items:center;
+    border-bottom:1px solid #cbd5e1;padding-bottom:3mm;margin-bottom:5mm;
+    font-size:8pt;color:#64748b;
+  }
+  .pr-runhead__brand{font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0b2239;}
+  .pr-runfoot{
+    display:flex;justify-content:space-between;gap:8px;
+    border-top:1px solid #cbd5e1;padding-top:2.5mm;margin-top:6mm;
+    font-size:8pt;color:#64748b;
+  }
+
+  .pr-pagehead{margin-bottom:5mm;break-inside:avoid;break-after:avoid;}
+  .pr-eyebrow{font-size:8pt;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#6d5efc;display:block;margin-bottom:3px;}
+  .pr-h1{font-size:20pt;font-weight:800;color:#0b2239;line-height:1.15;margin:0;}
+  .pr-h1--sm{font-size:15pt;}
+  .pr-h2{font-size:13pt;font-weight:700;color:#0b2239;margin:6mm 0 2mm;break-after:avoid;}
+  .pr-h3{font-size:10.5pt;font-weight:700;color:#0b2239;margin:4mm 0 1.5mm;break-after:avoid;}
+  .pr-h3:first-child{margin-top:0;}
+  .pr-sub{font-size:8.5pt;color:#64748b;margin:3px 0 0;}
+  .pr-mono{font-family:var(--font-mono);}
+  .pr-muted{color:#64748b;}
+  .pr-para{margin:0 0 2mm;}
+  .pr-list{margin:0 0 2mm;padding-left:5mm;}
+  .pr-list li{margin-bottom:1.2mm;}
+
+  .pr-hero{
+    display:grid;grid-template-columns:48mm 1fr;
+    border:1px solid #cbd5e1;border-left:4px solid #6d5efc;
+    border-radius:3mm;padding:5mm 6mm;break-inside:avoid;background:#f8fafc;
+  }
+  .pr-hero--d-no-go{border-left-color:#e11d48;}
+  .pr-hero--d-conditional{border-left-color:#b45309;}
+  .pr-hero--d-go{border-left-color:#047857;}
+  .pr-hero__main{display:flex;flex-direction:column;gap:1px;}
+  .pr-hero__value{font-size:24pt;font-weight:800;color:#0b2239;line-height:1.05;}
+  .pr-hero--d-no-go .pr-hero__value{color:#e11d48;}
+  .pr-hero--d-conditional .pr-hero__value{color:#b45309;}
+  .pr-hero--d-go .pr-hero__value{color:#047857;}
+  .pr-hero__rule{font-size:8.5pt;color:#64748b;}
+  .pr-hero__reason{border-left:1px solid #cbd5e1;padding-left:6mm;}
+  .pr-hero__reason p{margin:0;font-size:10pt;}
+
+  .pr-kpis{display:flex;gap:4mm;margin:4mm 0 0;}
+  .pr-kpi{
+    flex:1;border:1px solid #cbd5e1;border-radius:2.5mm;padding:4mm;break-inside:avoid;
+    display:flex;flex-direction:column;gap:1mm;background:#fff;
+  }
+  .pr-kpi__label{font-size:8pt;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;}
+  .pr-kpi__value{font-size:15pt;font-weight:800;color:#0b2239;}
+  .pr-kpi__sub{font-size:8pt;color:#64748b;}
+  .pr-kpi--danger .pr-kpi__value{color:#e11d48;}
+  .pr-kpi--warn .pr-kpi__value{color:#b45309;}
+  .pr-kpi--ok .pr-kpi__value{color:#047857;}
+  .pr-kpi--muted .pr-kpi__value{font-size:11pt;color:#64748b;}
+
+  .pr-table{width:100%;border-collapse:collapse;font-size:9pt;margin:2mm 0 3mm;}
+  .pr-table thead{display:table-header-group;}
+  .pr-table th{
+    background:#0b2239;color:#fff;text-align:left;font-weight:700;font-size:8pt;
+    text-transform:uppercase;letter-spacing:.04em;padding:2mm 2.5mm;
+  }
+  .pr-table td{border-bottom:1px solid #e2e8f0;padding:1.8mm 2.5mm;vertical-align:top;}
+  .pr-table tr{break-inside:avoid;}
+  .pr-table tbody tr:nth-child(even){background:#f8fafc;}
+  .pr-table--kv{table-layout:fixed;}
+  .pr-table--kv th{background:#eef2f7;color:#0b2239;text-transform:none;letter-spacing:0;
+    width:30%;border-bottom:1px solid #e2e8f0;font-size:8.5pt;}
+  .pr-table--kv td{width:20%;font-weight:600;color:#0b2239;}
+  .pr-table--kv td[colspan]{width:auto;}
+
+  .pr-sev{font-weight:700;white-space:nowrap;font-size:8.5pt;}
+  .pr-sev--danger{color:#e11d48;}
+  .pr-sev--warn{color:#b45309;}
+  .pr-sev--ok{color:#047857;}
+  .pr-sev--muted{color:#64748b;}
 }
