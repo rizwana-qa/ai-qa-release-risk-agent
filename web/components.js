@@ -967,9 +967,7 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
     <span>Section ${i} of ${total}</span>
   </div>`;
 
-  return `<div class="print-report" role="document" aria-hidden="true">
-    <div class="pr-cover-note pr-muted">Suggested filename: Release Risk Report_${esc(assessmentId)}_${esc(fileStamp)}.pdf &nbsp;·&nbsp;
-      This report has ${total} numbered sections; each begins on a new page.</div>
+  return `<div class="print-report" role="document" aria-hidden="true" data-filename="Release Risk Report_${esc(assessmentId)}_${esc(fileStamp)}.pdf">
     ${pages.map((p, idx) => `<section class="pr-page">
       ${runHead(p.title)}
       <header class="pr-pagehead${idx === 0 ? " pr-pagehead--lead" : ""}">

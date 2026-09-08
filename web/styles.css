@@ -913,7 +913,6 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
   }
   .print-report *{box-sizing:border-box;}
-  .pr-cover-note{font-size:8pt;color:#94a3b8;padding:9mm 14mm 0;}
 
   /* @page margin is 0; each section carries its own page margins here. */
   .pr-page{break-after:page;padding:13mm 14mm 12mm;}
