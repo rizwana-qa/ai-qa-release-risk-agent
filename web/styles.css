@@ -855,41 +855,93 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
   .stats, .mini-cards, .evstats{grid-template-columns:repeat(2,1fr);}
 }
 
+/* ---- phone layout (<=720px): the report is designed for this width, not
+   merely allowed to survive it. Tighter rhythm, single column, and the risk
+   register becomes purpose-built cards rather than stacked label:value rows. */
 @media (max-width:720px){
-  .container{padding:0 16px;}
+  html{-webkit-text-size-adjust:100%;}
+  .container{padding:0 14px;}
+  .app-main{padding-top:16px;}
+
+  /* tighter vertical rhythm */
+  .card, .acc, .banner, .hist-empty{margin-bottom:12px;}
+  .card__head{padding:13px 15px;gap:8px;}
+  .card__body{padding:15px;}
+  .acc__head{padding:13px 15px;}
+  .acc__body > *{padding:0 15px 15px;}
+  .acc__body > .tablewrap{margin:0 15px 15px;}
+  .acc[data-acc="coverage"] .acc__body > .banner{margin:0 15px 12px;}
+
+  /* report header */
+  .report__head{margin-bottom:16px;padding-bottom:14px;gap:12px;}
+  .report__head h1{font-size:19px;line-height:1.3;}
+  .report__subtitle{
+    display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  }
+  .report__actions{width:100%;}
+  .report__actions .btn{flex:1 1 0;min-width:0;}
+
+  /* decision + KPIs + rationale */
+  .exec-grid{gap:12px;margin-bottom:12px;}
   .exec-grid__kpis{grid-template-columns:minmax(0,1fr);}
-  .kpi{min-height:0;}
-  .statusbar{flex-wrap:wrap;}
+  .decision-box{padding:18px;}
+  .decision-box__value{font-size:34px;}
+  .kpi{padding:13px 14px;}
+  .kpi__value{font-size:19px;}
+  .rationale{padding:16px;}
+  .rationale__cols{grid-template-columns:minmax(0,1fr);gap:14px;}
+
+  .statusbar{flex-wrap:wrap;padding:13px 15px;gap:12px;}
   .statusbar__rule{margin-left:44px;}
   .kv{grid-template-columns:1fr;}
   .kv dt{margin-top:8px;}
-  .card__head{gap:8px;}
   .card__counts{margin-left:0;flex-basis:100%;}
-  .rationale__cols{grid-template-columns:minmax(0,1fr);gap:14px;}
+  .mini-cards{gap:10px;}
 
-  /* table.data relies on horizontal scroll at desktop widths; stack each row
-     into label:value blocks on a phone using the data-label each <td> carries. */
+  /* ---- generic table -> stacked label:value blocks ---- */
   table.data, table.data thead, table.data tbody, table.data tr, table.data th, table.data td{display:block;}
   table.data thead{display:none;}
   .tablewrap{overflow-x:visible;}
   .card__body--flush .tablewrap{border-top:none;}
-  table.data tr{padding:12px 16px;border-bottom:1px solid var(--border-soft);}
+  table.data tr{padding:12px 15px;border-bottom:1px solid var(--border-soft);}
   table.data tr:last-child{border-bottom:none;}
   table.data tr.flagged td{background:none;}
   table.data tr.flagged{border-left:3px solid var(--critical);}
-  table.data td{padding:4px 0;border-bottom:none;white-space:normal;}
+  table.data td{padding:3px 0;border-bottom:none;white-space:normal;}
+  table.data td:first-child{padding-top:0;}
+  table.data td:last-child{padding-bottom:0;}
+  table.data td .subtext{margin-top:5px;}
   table.data td[data-label]::before{
-    content:attr(data-label);display:block;font-size:10px;font-weight:700;
+    content:attr(data-label);display:block;font-size:9.5px;font-weight:700;
     letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);margin-bottom:2px;
   }
+
+  /* ---- risk register: purpose-built compact card, not 5 stacked labels ---- */
+  .card--risksig table.data tr{
+    display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;
+    align-items:start;padding:14px 15px;
+  }
+  .card--risksig table.data td{padding:0;}
+  .card--risksig table.data td[data-label]::before{display:none;}
+  .card--risksig td[data-label="Type / ID"]{grid-column:1;grid-row:1;align-self:center;}
+  .card--risksig td[data-label="Severity"]{grid-column:2;grid-row:1;justify-self:end;align-self:center;}
+  .card--risksig td[data-label="Category"]{
+    grid-column:1 / -1;grid-row:2;font-size:12px;color:var(--text-3);
+  }
+  .card--risksig td[data-label="Description"]{grid-column:1 / -1;grid-row:3;font-size:12.5px;color:var(--text-2);line-height:1.5;}
+  .card--risksig td[data-label="Status"]{grid-column:1 / -1;grid-row:4;margin-top:2px;}
+  .card--risksig .reg-kind{display:inline;font-size:10px;}
+  .card--risksig .reg-id{display:inline;margin-left:6px;font-size:12.5px;}
 }
 
-@media (max-width:380px){
-  .decision-box__value{font-size:32px;}
-  .report__head h1{font-size:20px;}
-  .btn{padding:0 12px;}
-  .report__actions{width:100%;}
-  .report__actions .btn{flex:1;}
+@media (max-width:400px){
+  .container{padding:0 12px;}
+  .decision-box__value{font-size:30px;}
+  .kpi__value{font-size:17.5px;}
+  .report__head h1{font-size:18px;}
+  .btn{padding:0 11px;}
+  .decision-box__blockers li,
+  .rationale__missing li{font-size:11.5px;}
 }
 
 /* ---------------------------- print / PDF ------------------------------------- */
@@ -906,7 +958,11 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
      header/footer into (the "localhost:8080 / date" line some browsers inject).
      Each .pr-page supplies its own margins via padding instead. */
   @page{size:A4 portrait;margin:0;}
-  html,body{background:#fff !important;}
+  /* Mobile Safari / Chrome Android also route "Print / Save as PDF" through
+     this @media print block. Pin absolute sizing so a narrow phone viewport
+     can't reflow the report to phone width before the paper layout applies. */
+  html{-webkit-text-size-adjust:100% !important;text-size-adjust:100% !important;}
+  html,body{background:#fff !important;width:auto !important;}
 
   /* Remove the entire application chrome and the on-screen report. */
   .topbar, .sidebar, .sitefoot, .drawer-overlay,
@@ -916,9 +972,10 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
     max-width:none !important;width:auto !important;background:#fff !important;
   }
   .report{display:block !important;}
-  .print-report{display:block !important;}
 
   .print-report{
+    display:block !important;
+    width:210mm;margin:0 auto;
     color:#1f2937;
     font-family:var(--font-ui);font-size:10.5pt;line-height:1.5;
     -webkit-print-color-adjust:exact;print-color-adjust:exact;
@@ -926,7 +983,7 @@ table.data tr.flagged td{background:rgba(241,107,112,.06);}
   .print-report *{box-sizing:border-box;}
 
   /* @page margin is 0; each section carries its own page margins here. */
-  .pr-page{break-after:page;padding:13mm 14mm 12mm;}
+  .pr-page{break-after:page;padding:13mm 14mm 12mm;width:210mm;}
   .pr-page:last-child{break-after:auto;}
 
   .pr-runhead{
