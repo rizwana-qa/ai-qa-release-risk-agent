@@ -862,9 +862,10 @@ function technicalAccordion(result, report, meta, mode) {
    ========================================================================== */
 
 function prKpi(label, value, tone, sub) {
+  const mark = tone === "danger" ? ICONS.x : tone === "warn" ? ICONS.alert : tone === "ok" ? ICONS.check : ICONS.help;
   return `<div class="pr-kpi pr-kpi--${tone}">
     <span class="pr-kpi__label">${esc(label)}</span>
-    <span class="pr-kpi__value">${esc(value)}</span>
+    <span class="pr-kpi__value">${mark}<span>${esc(value)}</span></span>
     <span class="pr-kpi__sub">${esc(sub || "")}</span>
   </div>`;
 }
@@ -888,6 +889,9 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
   const reasons = Array.isArray(report.reasons) ? report.reasons : [];
   const decClass = decisionClass(decision);
   const decLabel = decisionLabel(decision);
+  const decIcon = decision === "GO" ? ICONS.check
+    : decision === "NO_GO" ? ICONS.x
+    : decision === "CONDITIONAL" ? ICONS.alert : ICONS.help;
 
   const cr = summary?.changeRisk;
   const tc = summary?.testCoverage;
@@ -903,7 +907,7 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
     <div class="pr-hero pr-hero--${decClass}">
       <div class="pr-hero__main">
         <span class="pr-eyebrow">Deterministic release gate</span>
-        <span class="pr-hero__value">${esc(decLabel)}</span>
+        <div class="pr-hero__row"><span class="pr-hero__ring">${decIcon}</span><span class="pr-hero__value">${esc(decLabel)}</span></div>
         <span class="pr-hero__rule">${report.firedRule ? "Rule " + esc(report.firedRule) : "No rule identifier"}</span>
       </div>
       <div class="pr-hero__reason">
@@ -921,12 +925,12 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
 
     <h2 class="pr-h2">Top release blockers</h2>
     ${reasons.length
-      ? `<ol class="pr-list">${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ol>`
+      ? `<ol class="pr-list pr-list--crit">${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ol>`
       : `<p class="pr-muted">The deterministic gate reported no blocking reasons.</p>`}
 
     <h2 class="pr-h2">Recommended next actions</h2>
     ${actions.length
-      ? `<ol class="pr-list">${actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ol>`
+      ? `<ol class="pr-list pr-list--act">${actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ol>`
       : `<p class="pr-muted">No follow-up actions were derived from the submitted evidence.</p>`}
 
     <h2 class="pr-h2">Change under assessment</h2>
@@ -958,13 +962,14 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
     <table class="pr-table">
       <thead><tr><th>Type / ID</th><th>Category</th><th>Severity</th><th>Description</th><th>Status</th><th>Gate relevance</th></tr></thead>
       <tbody>
-        ${regRows.length ? regRows.map((r) => `<tr>
+        ${regRows.length ? regRows.map((r) => `<tr${r.gate === "Cited by gate" ? ' class="pr-flag"' : ""}>
           <td class="pr-mono">${esc(r.id)}</td>
           <td>${esc(r.cat)}</td>
           <td>${prSeverity(r.sev)}</td>
           <td>${esc(r.desc || "—")}</td>
-          <td>${esc(r.status || "—")}</td>
-          <td>${esc(r.gate)}</td>
+          <td><span class="pr-pill">${esc(r.status || "—")}</span></td>
+          <td>${r.gate === "Cited by gate" ? `<span class="pr-pill pr-pill--crit">${esc(r.gate)}</span>`
+            : r.gate === "Elevated" ? `<span class="pr-pill pr-pill--warn">${esc(r.gate)}</span>` : esc(r.gate)}</td>
         </tr>`).join("") : `<tr><td colspan="6" class="pr-muted">No risk signals were identified from the submitted evidence.</td></tr>`}
       </tbody>
     </table>
@@ -976,7 +981,13 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
     ...(report.firedRule ? [report.firedRule] : []),
     ...reasons.flatMap((r) => String(r).match(/\b(?:GATE|SEC|COV|REG)-\d+\b/g) || []),
   ])];
+  const execOther = cov ? (cov.blocked || 0) + (cov.other || 0) : 0;
+  const execSeg = cov ? [["Passing", cov.passed, "ok"], ["Failing", cov.failed, "crit"], ["Blocked / other", execOther, "neutral"]] : [];
+  const execBar = cov ? `<div class="pr-dist" role="img" aria-label="${esc(execSeg.map(([l, c]) => `${c} ${l.toLowerCase()}`).join(", "))}">${execSeg.map(([, c, t]) => (c ? `<i class="pr-dist--${t}" style="flex:${c}"></i>` : "")).join("")}</div>
+    <div class="pr-leg">${execSeg.map(([l, c, t]) => `<span><i class="pr-dist--${t}"></i>${esc(l)} <b>${c}</b></span>`).join("")}</div>` : "";
   const page3 = `
+    <h3 class="pr-h3">Test execution summary</h3>
+    ${execBar}
     <table class="pr-table pr-table--kv">
       <tbody>
         <tr><th>Test cases supplied</th><td>${cov ? cov.totalTests : "—"}</td>
@@ -1059,7 +1070,7 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
   const total = pages.length;
 
   const runHead = (title) => `<div class="pr-runhead">
-    <span class="pr-runhead__brand">AI QA Release Risk &amp; Test Strategy — Release Risk Report</span>
+    <span class="pr-runhead__brand"><span class="pr-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span>AI QA Release Risk &amp; Test Strategy — Release Risk Report</span>
     <span class="pr-runhead__id pr-mono">${esc(assessmentId)}</span>
   </div>`;
   const runFoot = (i) => `<div class="pr-runfoot">

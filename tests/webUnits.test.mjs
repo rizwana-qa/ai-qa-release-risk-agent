@@ -234,6 +234,44 @@ describe("web/components.js — staged report screens", () => {
   });
 });
 
+describe("web/components.js — print / PDF layer markup", () => {
+  const printOf = (html) => html.slice(html.indexOf('class="print-report"'));
+
+  it("decision panel carries the decision icon and the gate's own word and rule", () => {
+    const pr = printOf(reportView(sampleResult(), { stage: "decision" }));
+    assert.match(pr, /class="pr-hero pr-hero--d-conditional"/);
+    assert.match(pr, /pr-hero__ring"><svg/);
+    assert.match(pr, /pr-hero__value">CONDITIONAL</);
+    assert.match(pr, /Rule GATE-4/);
+  });
+
+  it("KPI cards carry a status icon and every report section has the brand band", () => {
+    const pr = printOf(reportView(sampleResult()));
+    assert.equal((pr.match(/class="pr-kpi__value"><svg/g) || []).length, 3);
+    assert.equal((pr.match(/class="pr-runhead"/g) || []).length, 4);
+    assert.equal((pr.match(/class="pr-mark"/g) || []).length, 4);
+  });
+
+  it("execution status bar restates the table's own figures and nothing else", () => {
+    const pr = printOf(reportView(sampleResult()));
+    assert.match(pr, /class="pr-dist"/);
+    assert.match(pr, /Passing <b>1<\/b>/);
+    assert.match(pr, /Failing <b>0<\/b>/);
+    assert.match(pr, /Blocked \/ other <b>0<\/b>/);
+  });
+
+  it("gate-cited defects are flagged in the register; escaping still applies", () => {
+    const x = "<img src=x onerror=alert(1)>";
+    const pr = printOf(reportView(sampleResult({
+      report: { reasons: ["An open critical defect (DEF-1) blocks release."], releaseDecision: "NO_GO", firedRule: "GATE-1" },
+      context: { ...sampleResult().context, defects: [{ id: "DEF-1", label: "DEF-1", severity: "critical", status: "open", area: x, description: x, security: false }] },
+    })));
+    assert.match(pr, /<tr class="pr-flag">/);
+    assert.match(pr, /pr-pill pr-pill--crit">Cited by gate</);
+    assert.doesNotMatch(pr, /<img [^>]*onerror/i);
+  });
+});
+
 describe("web/*.js — every module parses as an ES module", () => {
   for (const f of ["format.js", "icons.js", "upload.js", "workspace.js", "components.js", "app.js"]) {
     it(`node --check ${f}`, () => {

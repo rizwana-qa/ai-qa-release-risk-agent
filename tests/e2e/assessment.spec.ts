@@ -154,3 +154,44 @@ test("staged workflow: Continue is gated, data survives Back, locked stages stay
   await expect(stage("review")).toHaveAttribute("aria-disabled", "true");
   await expect(stage("decision")).toHaveAttribute("aria-disabled", "true");
 });
+
+test("print / PDF layer: brand band, decision panel fits, status bar, no orphan pages", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('.ws [data-act="load-example"]').click();
+  await continueToEvidence(page);
+  await page.locator('[data-act="analyze"]').click();
+  await expect(page.locator(".tabs")).toBeVisible({ timeout: 40_000 });
+
+  // The print layer is the only thing the PDF shows; render it exactly as Print -> Save as PDF does.
+  await page.emulateMedia({ media: "print" });
+  const m = await page.evaluate(() => {
+    const shown = (sel: string) => { const e = document.querySelector(sel); return !!e && getComputedStyle(e).display !== "none"; };
+    const rect = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+    const band = document.querySelector(".pr-runhead") as HTMLElement;
+    const value = rect(".pr-hero__value"), panel = rect(".pr-hero__main");
+    return {
+      printOnly: shown(".print-report") && !shown(".topbar") && !shown(".wf-bar") && !shown(".actbar") && !shown(".exec-grid"),
+      sections: document.querySelectorAll(".pr-page").length,
+      bandBg: getComputedStyle(band).backgroundColor,
+      decisionFits: value.right <= panel.right && value.left >= panel.left,
+      ringShown: shown(".pr-hero__ring svg"),
+      kpiIcons: document.querySelectorAll(".pr-kpi__value svg").length,
+      execBar: shown(".pr-dist"),
+      decision: (document.querySelector(".pr-hero__value") as HTMLElement).textContent,
+    };
+  });
+  expect(m.printOnly).toBe(true);
+  expect(m.sections).toBe(4);
+  expect(m.bandBg).toBe("rgb(24, 54, 91)"); // brand navy #18365B, same token as the web header
+  expect(m.decisionFits, "decision word must stay inside its panel").toBe(true);
+  expect(m.ringShown).toBe(true);
+  expect(m.kpiIcons).toBe(3);
+  expect(m.execBar).toBe(true);
+  expect(m.decision).toBe("CONDITIONAL");
+
+  // Actual PDF: one physical page per section for this report (no footer-only or blank pages).
+  const pdf = await page.pdf({ format: "A4", preferCSSPageSize: true, printBackground: false });
+  const pages = (pdf.toString("latin1").match(/\/Type\s*\/Page(?![s\w])/g) || []).length;
+  expect(pages).toBe(4);
+});
+
