@@ -9,7 +9,7 @@
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 
-import { PDF_FIXTURE, PROCESSING_STAGES } from "./support.ts";
+import { PDF_FIXTURE, PROCESSING_STAGES, REVIEW_TAB, continueToEvidence, goToDecision, openReviewTab } from "./support.ts";
 
 const SHOTS = fileURLToPath(new URL("../../artifacts/ui-review/", import.meta.url));
 
@@ -38,14 +38,17 @@ for (const vp of VIEWPORTS) {
 
     /* workspace */
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "QA Release Risk Assessment" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Context, scope & metadata" })).toBeVisible();
     let of = await noPageOverflow(page);
     expect(of.ok, `workspace overflow: scrollWidth ${of.w} > clientWidth ${of.c}`).toBe(true);
     await page.screenshot({ path: `${SHOTS}${vp.name}-01-workspace.png`, fullPage: true });
 
-    /* load example + evidence */
+    /* load example, then the evidence screen */
     await page.locator('.ws [data-act="load-example"]').click();
     await expect(page.locator('[data-group="ac"]')).toHaveCount(4);
+    of = await noPageOverflow(page);
+    expect(of.ok, `context overflow: ${of.w} > ${of.c}`).toBe(true);
+    await continueToEvidence(page);
     await page.locator("[data-file-input]").setInputFiles(PDF_FIXTURE);
     const chip = page.locator(".doc-chip", { hasText: "sample-supporting-document.pdf" });
     await expect(chip).toBeVisible();
@@ -69,9 +72,17 @@ for (const vp of VIEWPORTS) {
     of = await noPageOverflow(page);
     expect(of.ok, `processing overflow: ${of.w} > ${of.c}`).toBe(true);
 
-    /* report — real decision */
+    /* review screen — every tab, no overflow */
+    await expect(page.locator(".tabs")).toBeVisible({ timeout: 40_000 });
+    for (const tab of Object.values(REVIEW_TAB)) {
+      await openReviewTab(page, tab);
+      of = await noPageOverflow(page);
+      expect(of.ok, `review/${tab} overflow: ${of.w} > ${of.c}`).toBe(true);
+    }
+
+    /* decision screen — real decision */
+    await goToDecision(page);
     const decision = page.locator(".exec-grid .decision-box__value");
-    await expect(decision).toBeVisible({ timeout: 40_000 });
     await expect(decision).toHaveText("CONDITIONAL");
     await expect(page.locator(".exec-grid .decision-box__meta")).toContainText("GATE-4");
 

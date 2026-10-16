@@ -18,7 +18,7 @@
 
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
-import { REPORT_ACCORDION, revealCentered, openAccordion } from "./support.ts";
+import { REPORT_ACCORDION, continueToEvidence, goToDecision, goToReview, openReviewTab, revealCentered, openAccordion } from "./support.ts";
 
 const VIDEO_DEST = fileURLToPath(
   new URL("../../artifacts/portfolio-demo/portfolio-demo-raw.webm", import.meta.url),
@@ -60,7 +60,7 @@ test("Portfolio Demo (30s cut source)", async ({ page }) => {
 
   /* Phase 1 — Submit Release Scenario (~0-4s) ---------------------------- */
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "QA Release Risk Assessment" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Context, scope & metadata" })).toBeVisible();
   mark("phase1-start");
   await setCaption(page, "Submit Release Scenario");
 
@@ -69,6 +69,7 @@ test("Portfolio Demo (30s cut source)", async ({ page }) => {
   await page.locator('.ws [data-act="load-example"]').click();
   await expect(page.locator('[data-field="releaseScope"]')).toHaveValue(/saved card/i);
   await revealCentered(page, page.locator('[data-group="ac"]').first(), 350);
+  await continueToEvidence(page);
   const analyze = page.locator('[data-act="analyze"]');
   await revealCentered(page, analyze, 300);
   await expect(analyze).toBeEnabled();
@@ -81,10 +82,11 @@ test("Portfolio Demo (30s cut source)", async ({ page }) => {
   mark("processing-start");
 
   const decision = page.locator(".exec-grid .decision-box__value");
-  await expect(decision).toBeVisible({ timeout: 100_000 });
+  await expect(page.locator(".tabs")).toBeVisible({ timeout: 100_000 }); // report opens on Review
   mark("processing-end"); // <- everything between processing-start and here gets compressed in post
 
   /* Phase 3 — Prove the live AI path (~4.5s target) ----------------------- */
+  await goToDecision(page);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.waitForTimeout(250);
   await revealCentered(page, page.locator(REPORT_ACCORDION.technical), 300);
@@ -99,9 +101,6 @@ test("Portfolio Demo (30s cut source)", async ({ page }) => {
   await revealCentered(page, page.locator(".exec-grid"), 500);
   await expect(decision).toBeVisible();
   await page.waitForTimeout(500);
-  await revealCentered(page, page.locator(REPORT_ACCORDION.ai), 350);
-  await openAccordion(page, REPORT_ACCORDION.ai);
-  await page.waitForTimeout(1100);
   await revealCentered(page, page.locator(REPORT_ACCORDION.trace), 300);
   await openAccordion(page, REPORT_ACCORDION.trace);
   await page.waitForTimeout(1100);
@@ -109,19 +108,25 @@ test("Portfolio Demo (30s cut source)", async ({ page }) => {
 
   /* Phase 5 — Test strategy walkthrough (~6s target) ---------------------- */
   await setCaption(page, "Test Strategy");
-  await revealCentered(page, page.locator(REPORT_ACCORDION.coverage), 300);
-  await openAccordion(page, REPORT_ACCORDION.coverage);
+  await goToReview(page);
+  await openReviewTab(page, "ai");
   await page.waitForTimeout(1100);
+  await openReviewTab(page, "coverage");
+  await page.waitForTimeout(1100);
+  await openReviewTab(page, "scenarios");
   await revealCentered(page, page.getByRole("heading", { name: "Missing test scenarios" }), 300);
   await page.waitForTimeout(800);
+  await openReviewTab(page, "regression");
   await revealCentered(page, page.getByRole("heading", { name: "Regression priorities" }), 300);
   await page.waitForTimeout(800);
+  await openReviewTab(page, "defects");
   await revealCentered(page, page.getByRole("heading", { name: "Known defects" }), 300);
   await page.waitForTimeout(800);
   mark("phase5-end");
 
   /* Phase 6 — Finale: complete QA assessment (~5s target) ------------------ */
   await setCaption(page, "Complete QA Assessment");
+  await goToDecision(page);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   await page.waitForTimeout(900);
   await expect(decision).toBeVisible();

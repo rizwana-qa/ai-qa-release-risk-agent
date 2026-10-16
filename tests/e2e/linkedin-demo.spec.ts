@@ -26,6 +26,10 @@ import {
   PDF_FIXTURE,
   PROCESSING_STAGES,
   REPORT_ACCORDION,
+  continueToEvidence,
+  goToDecision,
+  goToReview,
+  openReviewTab,
   revealCentered,
   openAccordion,
 } from "./support.ts";
@@ -44,8 +48,8 @@ test("LinkedIn Demo: AI QA Release Risk Assessment", async ({ page }, testInfo) 
 
   /* 1 — Open the application ------------------------------------------------ */
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "QA Release Risk Assessment" })).toBeVisible();
-  await expect(page.locator('[data-act="analyze"]')).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Context, scope & metadata" })).toBeVisible();
+  await expect(page.locator('[data-act="continue-evidence"]')).toBeVisible();
   await page.waitForTimeout(HOLD.read);
 
   /* 2 — Load example release information ---------------------------------- */
@@ -60,6 +64,7 @@ test("LinkedIn Demo: AI QA Release Risk Assessment", async ({ page }, testInfo) 
   await page.waitForTimeout(HOLD.read);
 
   /* 3 — Attach the supporting document ---------------------------------- */
+  await continueToEvidence(page);
   await revealCentered(page, page.locator(".dropzone"));
   await page.locator("[data-file-input]").setInputFiles(PDF_FIXTURE);
 
@@ -97,8 +102,11 @@ test("LinkedIn Demo: AI QA Release Risk Assessment", async ({ page }, testInfo) 
   await page.waitForTimeout(HOLD.read); // all stages complete
 
   /* 6 — Final assessment: the real release decision ----------------- */
+  await expect(page.locator(".tabs")).toBeVisible({ timeout: 45_000 }); // opens on Review
+  await page.waitForTimeout(HOLD.read);
+  await goToDecision(page);
   const decision = page.locator(".exec-grid .decision-box__value");
-  await expect(decision).toBeVisible({ timeout: 45_000 });
+  await expect(decision).toBeVisible();
   await expect(decision).toHaveText("CONDITIONAL");
   await expect(page.locator(".exec-grid .decision-box__meta")).toContainText("GATE-4");
 
@@ -115,16 +123,6 @@ test("LinkedIn Demo: AI QA Release Risk Assessment", async ({ page }, testInfo) 
   await revealCentered(page, page.getByRole("heading", { name: "Release readiness" }));
   await page.waitForTimeout(HOLD.study);
 
-  // AI analysis (advisory) — identified risks, change summary
-  await revealCentered(page, page.locator(REPORT_ACCORDION.ai));
-  await page.waitForTimeout(HOLD.read);
-
-  // Test coverage — why the deterministic rules rate coverage as insufficient
-  await revealCentered(page, page.locator(REPORT_ACCORDION.coverage));
-  await openAccordion(page, REPORT_ACCORDION.coverage);
-  await expect(page.locator(REPORT_ACCORDION.coverage)).toHaveClass(/\bopen\b/);
-  await page.waitForTimeout(HOLD.study);
-
   // Decision trace — AI analysis identifies risk; the deterministic gate decides
   await revealCentered(page, page.locator(REPORT_ACCORDION.trace));
   await openAccordion(page, REPORT_ACCORDION.trace);
@@ -137,7 +135,17 @@ test("LinkedIn Demo: AI QA Release Risk Assessment", async ({ page }, testInfo) 
   await expect(page.locator(REPORT_ACCORDION.technical)).toHaveClass(/\bopen\b/);
   await page.waitForTimeout(HOLD.read);
 
+  // Back to Review: AI analysis (advisory) and why coverage is insufficient
+  await goToReview(page);
+  await openReviewTab(page, "ai");
+  await revealCentered(page, page.locator("#panel-ai"));
+  await page.waitForTimeout(HOLD.read);
+  await openReviewTab(page, "coverage");
+  await revealCentered(page, page.locator("#panel-coverage"));
+  await page.waitForTimeout(HOLD.study);
+
   /* 8 — Final frame: the release decision, clearly readable ----------- */
+  await goToDecision(page);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   await expect(decision).toHaveText("CONDITIONAL");
   await expect(page.locator(".exec-grid .decision-box__meta")).toContainText("GATE-4");

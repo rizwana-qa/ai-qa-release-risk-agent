@@ -1,7 +1,7 @@
 /** Shared helpers, fixtures and selectors for the Playwright browser tests. */
 
 import { fileURLToPath } from "node:url";
-import type { Page, Locator } from "@playwright/test";
+import { expect, type Page, type Locator } from "@playwright/test";
 
 /** The real supporting PDF used by both the functional test and the demo. */
 export const PDF_FIXTURE = fileURLToPath(
@@ -18,13 +18,45 @@ export const PROCESSING_STAGES = [
   "Assembling release report",
 ] as const;
 
-/** Stable selectors for the report accordions (data-acc in web/components.js). */
+/** Stable selectors for the Decision-screen accordions (data-acc in web/components.js). */
 export const REPORT_ACCORDION = {
-  ai: '.acc[data-acc="ai"]',
-  coverage: '.acc[data-acc="coverage"]',
   trace: '.acc[data-acc="trace"]',
   technical: '.acc[data-acc="technical"]',
 } as const;
+
+/** The Review screen's tabs (data-tab in web/components.js) and their panels. */
+export const REVIEW_TAB = {
+  risk: "risk",
+  coverage: "coverage",
+  scenarios: "scenarios",
+  defects: "defects",
+  regression: "regression",
+  ai: "ai",
+} as const;
+
+/** Context -> Evidence: the Continue button is enabled once the Context is complete. */
+export async function continueToEvidence(page: Page): Promise<void> {
+  await page.locator('[data-act="continue-evidence"]').click();
+  await expect(page.getByRole("heading", { name: "Evidence, tests & known defects" })).toBeVisible();
+}
+
+/** Review -> Decision, via the sticky action bar. */
+export async function goToDecision(page: Page): Promise<void> {
+  await page.locator('.actbar [data-nav="decision"]').click();
+  await expect(page.locator(".exec-grid .decision-box__value")).toBeVisible();
+}
+
+/** Decision -> Review, via the sticky action bar. */
+export async function goToReview(page: Page): Promise<void> {
+  await page.locator('.actbar [data-nav="review"]').click();
+  await expect(page.locator(".tabs")).toBeVisible();
+}
+
+/** Select a Review tab and wait for its panel to show. */
+export async function openReviewTab(page: Page, tab: string): Promise<void> {
+  await page.locator(`[data-tab="${tab}"]`).click();
+  await expect(page.locator(`#panel-${tab}`)).toBeVisible();
+}
 
 /**
  * Smoothly bring an element to the centre of the viewport and let it settle.

@@ -185,6 +185,55 @@ describe("web/components.js — reportView renders backend data faithfully and i
   });
 });
 
+describe("web/components.js — staged report screens", () => {
+  it("review stage shows the tabs and findings but not the decision hero", () => {
+    const html = reportView(sampleResult(), { stage: "review" });
+    assert.match(html, /role="tablist"/);
+    assert.match(html, /Stage 4 of 5/);
+    assert.doesNotMatch(html, /class="exec-grid"/);
+    assert.match(html, /data-nav="decision"/); // Continue to Decision
+  });
+
+  it("review stage keeps every panel in the DOM and hides all but the selected tab", () => {
+    const html = reportView(sampleResult(), { stage: "review", tab: "coverage" });
+    const panels = [...html.matchAll(/<div class="tabpanel"[^>]*id="panel-(\w+)"([^>]*)>/g)];
+    assert.equal(panels.length, 6);
+    const visible = panels.filter((m) => !/\bhidden\b/.test(m[2])).map((m) => m[1]);
+    assert.deepEqual(visible, ["coverage"]);
+    assert.match(html, /rate test coverage as insufficient/i); // hidden panels still hold their content
+  });
+
+  it("decision stage shows the gate's decision, rule and execution summary, with no tabs", () => {
+    const html = reportView(sampleResult(), { stage: "decision" });
+    assert.match(html, /class="exec-grid"/);
+    assert.match(html, /decision-box__value">CONDITIONAL</);
+    assert.match(html, /GATE-4/);
+    assert.match(html, /Test execution summary/);
+    assert.match(html, /Open defects/);
+    assert.doesNotMatch(html, /role="tablist"/);
+    assert.match(html, /data-nav="review"/); // back to Review
+  });
+
+  it("decision stage never invents a decision for a missing token", () => {
+    const html = reportView(sampleResult({ report: { releaseDecision: null, firedRule: null } }), { stage: "decision" });
+    assert.match(html, /decision-box__value">UNAVAILABLE</);
+    assert.doesNotMatch(html, />\s*GO\s*</);
+  });
+
+  it("the decision is rendered from the gate's token for every outcome", () => {
+    for (const [token, label] of [["GO", "GO"], ["NO_GO", "NO GO"], ["CONDITIONAL", "CONDITIONAL"]]) {
+      const html = reportView(sampleResult({ report: { releaseDecision: token } }), { stage: "decision" });
+      assert.match(html, new RegExp(`decision-box__value">${label}<`));
+    }
+  });
+
+  it("both stages carry the print layer, which stays out of the on-screen flow", () => {
+    for (const stage of ["review", "decision"]) {
+      assert.match(reportView(sampleResult(), { stage }), /class="print-report"/);
+    }
+  });
+});
+
 describe("web/*.js — every module parses as an ES module", () => {
   for (const f of ["format.js", "icons.js", "upload.js", "workspace.js", "components.js", "app.js"]) {
     it(`node --check ${f}`, () => {

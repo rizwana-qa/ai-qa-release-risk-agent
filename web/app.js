@@ -6,7 +6,9 @@
 // never shows GO from a client-side fallback.
 
 import * as C from "./components.js";
-import { mountWorkspace, getPayload, setValidation, setBusy, getWorkflowState, loadScenario } from "./workspace.js";
+import { ICONS } from "./icons.js";
+import { decisionLabel, decisionClass, esc } from "./format.js";
+import { mountWorkspace, getPayload, setValidation, setBusy, getWorkflowState, loadScenario, showStage } from "./workspace.js";
 
 const CUSTOM_STAGES = [
   ["prepare-context", "Preparing release context"],
@@ -19,62 +21,11 @@ const CUSTOM_STAGES = [
 
 const view = document.getElementById("view");
 const steps = document.getElementById("topbar-steps");
+const compact = document.getElementById("wf-compact");
+const headDecision = document.getElementById("hdr-decision");
 const menuBtn = document.getElementById("menu-btn");
 const menuList = document.getElementById("menu-list");
 const relaunchBtn = document.getElementById("relaunch-btn");
-
-/* ---------------------------- workflow drawer ---------------------------- */
-//
-// Below 1024px the sidebar is an off-canvas drawer: a hamburger opens it, the
-// overlay or Escape closes it, focus is trapped while open and returned to the
-// hamburger on close. Above 1024px the sidebar is permanent and this is inert.
-
-const appEl = document.getElementById("app");
-const sidebarEl = document.getElementById("sidebar");
-const drawerBtn = document.getElementById("drawer-btn");
-const drawerOverlay = document.getElementById("drawer-overlay");
-const DRAWER_MQ = window.matchMedia("(max-width: 1024px)");
-
-function drawerFocusables() {
-  return [...sidebarEl.querySelectorAll('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')]
-    .filter((el) => el.offsetParent !== null);
-}
-
-function openDrawer() {
-  if (!DRAWER_MQ.matches) return;
-  appEl.dataset.drawer = "open";
-  drawerOverlay.hidden = false;
-  drawerBtn.setAttribute("aria-expanded", "true");
-  document.body.style.overflow = "hidden";
-  (drawerFocusables()[0] || sidebarEl).focus();
-  document.addEventListener("keydown", onDrawerKeydown, true);
-}
-
-function closeDrawer({ restoreFocus = true } = {}) {
-  if (appEl.dataset.drawer !== "open") return;
-  delete appEl.dataset.drawer;
-  drawerOverlay.hidden = true;
-  drawerBtn.setAttribute("aria-expanded", "false");
-  document.body.style.overflow = "";
-  document.removeEventListener("keydown", onDrawerKeydown, true);
-  if (restoreFocus) drawerBtn.focus();
-}
-
-function onDrawerKeydown(e) {
-  if (e.key === "Escape") { e.preventDefault(); closeDrawer(); return; }
-  if (e.key !== "Tab") return;
-  const items = drawerFocusables();
-  if (!items.length) return;
-  const first = items[0];
-  const last = items[items.length - 1];
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-}
-
-drawerBtn.addEventListener("click", () =>
-  (appEl.dataset.drawer === "open" ? closeDrawer() : openDrawer()));
-drawerOverlay.addEventListener("click", () => closeDrawer());
-DRAWER_MQ.addEventListener("change", (e) => { if (!e.matches) closeDrawer({ restoreFocus: false }); });
 
 const app = {
   phase: "workspace", // workspace | processing | report
@@ -82,94 +33,133 @@ const app = {
   result: null,
   failed: false,
   lastRun: null, // { kind:"custom", payload } | { kind:"demo" }
-  ws: { contextComplete: false, canAnalyze: false, demoLoaded: false },
+  ws: { contextComplete: false, canAnalyze: false, demoLoaded: false, stage: "context" },
+  rstage: "review", // which report screen is showing: review | decision
+  tab: "risk", // visible Review tab
+  stepsOpen: false, // mobile stage list
 };
 
 /* ------------------------------- step state -------------------------------- */
 //
 // Real, derived state — never decorative. Each of the five steps is exactly
-// one of: locked | available | current | complete, computed from the actual
-// application phase plus (while on the workspace) the live form validity
+// one of: locked | available | current | complete | failed, computed from the
+// actual application phase plus (while on the workspace) the live form validity
 // workspace.js already enforces (canAnalyze(), section completion). Nothing
 // here invents a new validation rule; it only reflects the existing ones.
 
 const STEP_ORDER = ["context", "evidence", "analyze", "review", "decision"];
 const STEP_LABEL = { context: "Context", evidence: "Evidence", analyze: "Analyze", review: "Review", decision: "Decision" };
+const STEP_DESC = {
+  context: "Scope & metadata", evidence: "Tests & known defects", analyze: "AI risk analysis",
+  review: "Findings & risk signals", decision: "Release decision",
+};
+const STATE_WORD = { complete: "Complete", current: "In progress", available: "Available", locked: "Locked", failed: "Needs attention" };
 
 function computeStepStates() {
   if (app.phase === "processing") {
-    return { context: "complete", evidence: "complete", analyze: "current", review: "locked", decision: "locked" };
+    return { context: "complete", evidence: "complete", analyze: app.failed ? "failed" : "current", review: "locked", decision: "locked" };
   }
   if (app.phase === "report") {
     // The assessment has finished and a decision exists — every step is done,
-    // not "in progress". A stale "current" here was the exact bug: nothing is
-    // still running once the report is on screen.
+    // not "in progress". Nothing is still running once the report is on screen.
     return { context: "complete", evidence: "complete", analyze: "complete", review: "complete", decision: "complete" };
   }
   // workspace
   const ctxOk = app.ws.contextComplete;
+  const onEvidence = app.ws.stage === "evidence";
   return {
-    context: ctxOk ? "complete" : "current",
-    evidence: ctxOk ? "available" : "locked",
+    context: !onEvidence ? "current" : ctxOk ? "complete" : "available",
+    evidence: onEvidence ? "current" : ctxOk ? "available" : "locked",
     analyze: app.ws.canAnalyze ? "available" : "locked",
     review: "locked",
     decision: "locked",
   };
 }
 
+/** The one stage that currently has focus. On the report every stage is
+ * "complete", but the visible screen (Review or Decision) is still where the
+ * user is — it gets the distinct active treatment on top of its completion. */
+function activeStepKey(map) {
+  if (app.phase === "report") return app.rstage;
+  if (app.phase === "processing") return "analyze";
+  return app.ws.stage === "evidence" ? "evidence" : STEP_ORDER.find((k) => map[k] === "current") || "context";
+}
+
+/** Navigation is inert while a run is in flight, for locked steps, and for
+ * Analyze once a report exists — exactly the clicks the old sidebar ignored. */
+function stepDisabled(key, state) {
+  return state === "locked" || app.phase === "processing" || (app.phase === "report" && key === "analyze");
+}
+
 function paintSteps() {
   const map = computeStepStates();
-  // The one stage that currently has focus. On the report every stage is
-  // "complete", but "Decision" is still where the user is — it gets a distinct
-  // active treatment on top of its completion check.
-  const activeKey = app.phase === "report" ? "decision"
-    : app.phase === "processing" ? "analyze"
-    : (STEP_ORDER.find((k) => map[k] === "current") || "context");
+  const activeKey = activeStepKey(map);
+
   steps.querySelectorAll("[data-step]").forEach((el) => {
-    const s = map[el.dataset.step] || "locked";
+    const key = el.dataset.step;
+    const s = map[key] || "locked";
     el.dataset.state = s;
-    el.dataset.active = String(el.dataset.step === activeKey);
-    el.setAttribute("aria-current", el.dataset.step === activeKey ? "step" : "false");
-    el.disabled = s === "locked";
-    el.setAttribute("aria-disabled", s === "locked" ? "true" : "false");
-    const stateEl = el.querySelector(".flow__state");
-    if (stateEl) stateEl.textContent = s === "complete" ? "Complete" : s === "current" ? "In progress" : s === "available" ? "Available" : "Locked";
+    el.dataset.active = String(key === activeKey);
+    el.setAttribute("aria-current", key === activeKey ? "step" : "false");
+    el.setAttribute("aria-disabled", stepDisabled(key, s) ? "true" : "false");
+    const digits = el.querySelector(".wf-step__digits");
+    if (digits) digits.innerHTML = s === "complete" ? ICONS.check : s === "failed" ? ICONS.alert : s === "locked" ? ICONS.lock : String(STEP_ORDER.indexOf(key) + 1).padStart(2, "0");
+    const stateEl = el.querySelector(".wf-step__state");
+    if (stateEl) stateEl.textContent = STATE_WORD[s];
   });
 
-  // mobile compact indicator: "STEP N OF 5: LABEL" + progress bar
-  const curKey = STEP_ORDER.find((k) => map[k] === "current")
-    || (app.phase === "report" ? "decision" : "context");
-  const curIdx = STEP_ORDER.indexOf(curKey) + 1;
-  const label = steps.querySelector(".flow__compact-label");
-  const fill = steps.querySelector(".flow__compact-fill");
-  if (label) label.textContent = `Step ${curIdx} of ${STEP_ORDER.length}: ${STEP_LABEL[curKey]}`;
-  if (fill) fill.style.width = `${(curIdx / STEP_ORDER.length) * 100}%`;
+  // Mobile: "Step N of 5: Label" + segmented progress + an inline stage list.
+  const curIdx = STEP_ORDER.indexOf(activeKey) + 1;
+  compact.innerHTML = `
+    <div class="wfc__row">
+      <div class="wfc__label">Step ${curIdx} of ${STEP_ORDER.length} <span>· ${STEP_LABEL[activeKey]}</span></div>
+      <button class="wfc__btn" type="button" id="wfc-toggle" aria-expanded="${app.stepsOpen}" aria-controls="wfc-list">Stages ${ICONS.chevron}</button>
+    </div>
+    <div class="wfc__bar" aria-hidden="true">${STEP_ORDER.map((k, i) => `<i data-on="${map[k] === "complete" && k !== activeKey ? 1 : 0}" data-cur="${i + 1 === curIdx ? 1 : 0}"></i>`).join("")}</div>
+    <div class="wfc__list" id="wfc-list" ${app.stepsOpen ? "" : "hidden"}>${STEP_ORDER.map((k, i) => {
+      const s = map[k];
+      return `<button type="button" data-step="${k}" data-state="${s}" data-active="${k === activeKey}" ${k === activeKey ? 'aria-current="step"' : ""} aria-disabled="${stepDisabled(k, s)}">
+        <span class="wf-step__n">${s === "complete" ? ICONS.check : i + 1}</span>
+        <span><b>${STEP_LABEL[k]}</b> <span class="muted">· ${STEP_DESC[k]}</span></span><em>${STATE_WORD[s]}</em></button>`;
+    }).join("")}</div>`;
+
+  // The decision, once one exists, stays visible in the header on every screen.
+  const dec = app.phase === "report" ? app.result?.report : null;
+  headDecision.innerHTML = dec
+    ? `<span class="topbar__chip ${decisionClass(dec.releaseDecision)}" role="status">${esc(decisionLabel(dec.releaseDecision))}${dec.firedRule ? ` <small>${esc(dec.firedRule)}</small>` : ""}</span>`
+    : "";
 
   // "Relaunch to update" only makes sense once a report is showing, and only
   // for a run this session can actually re-submit.
   if (relaunchBtn) relaunchBtn.hidden = !(app.phase === "report" && app.lastRun);
 }
 
-/** Sidebar nav is real navigation, not decoration: unlocked steps scroll to
- * (or, from the report, go back to) their section; locked steps do nothing. */
-steps.addEventListener("click", (e) => {
+/** Stage navigation is real navigation, not decoration: unlocked steps go to
+ * their screen; locked steps do nothing. Returning to Context/Evidence from a
+ * report discards the on-screen report (inputs are kept), as it always has. */
+function onStepClick(e) {
   const btn = e.target.closest("[data-step]");
-  if (!btn || btn.disabled) return;
+  if (!btn || btn.getAttribute("aria-disabled") === "true") return;
   const step = btn.dataset.step;
-  // A navigation choice dismisses the mobile drawer (no-op on desktop).
-  closeDrawer({ restoreFocus: false });
+  app.stepsOpen = false;
 
   if (app.phase === "report") {
-    if (step === "context" || step === "evidence") { toWorkspace({ reset: false }); return; }
-    if (step === "decision") { view.querySelector(".exec-grid")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
-    if (step === "review") { view.querySelector(".card--risksig, .exec-grid")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    if (step === "context" || step === "evidence") { toWorkspace({ reset: false }); showStage(step); return; }
+    if (step === "review" || step === "decision") showReportStage(step);
     return;
   }
   if (app.phase === "workspace") {
-    if (step === "context") document.getElementById("ws-context-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    else if (step === "evidence") document.getElementById("ws-evidence-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    else if (step === "analyze") view.querySelector('[data-act="analyze"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (step === "context" || step === "evidence") { showStage(step); return; }
+    if (step === "analyze") {
+      showStage("evidence");
+      view.querySelector('[data-act="analyze"]')?.focus();
+    }
   }
+}
+steps.addEventListener("click", onStepClick);
+compact.addEventListener("click", (e) => {
+  if (e.target.closest("#wfc-toggle")) { app.stepsOpen = !app.stepsOpen; paintSteps(); compact.querySelector("#wfc-toggle")?.focus(); return; }
+  onStepClick(e);
 });
 
 function toWorkspace({ reset = false } = {}) {
@@ -196,12 +186,18 @@ function onWorkspaceAnalyze() {
   submitCustom();
 }
 
+function focusHeading() {
+  window.scrollTo({ top: 0 });
+  view.querySelector("#page-h")?.focus({ preventScroll: true });
+}
+
 function toProcessing(stageDefs) {
   app.phase = "processing";
   app.failed = false;
   app.stages = stageDefs.map(([key, label], i) => ({ index: i, key, label, status: "pending" }));
   renderProcessing();
   paintSteps();
+  focusHeading();
 }
 
 function renderProcessing() {
@@ -211,9 +207,22 @@ function renderProcessing() {
 function toReport(result) {
   app.phase = "report";
   app.result = result;
-  view.innerHTML = C.reportView(result);
+  app.rstage = "review";
+  app.tab = "risk";
+  renderReport();
+  focusHeading();
+}
+
+function renderReport() {
+  view.innerHTML = C.reportView(app.result, { stage: app.rstage, tab: app.tab });
   paintSteps();
-  view.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function showReportStage(stage) {
+  if (app.phase !== "report" || !app.result) return;
+  app.rstage = stage;
+  renderReport();
+  focusHeading();
 }
 
 function toError(message) {
@@ -221,6 +230,7 @@ function toError(message) {
   app.failed = true;
   view.innerHTML = C.errorView(message);
   paintSteps();
+  focusHeading();
 }
 
 /* ------------------------------ custom run ------------------------------ */
@@ -517,12 +527,41 @@ view.addEventListener("click", (e) => {
     head.setAttribute("aria-expanded", open ? "true" : "false");
     return;
   }
+  const tab = e.target.closest("[data-tab]");
+  if (tab) { selectTab(tab.dataset.tab, { focus: true }); return; }
+  const nav = e.target.closest("[data-nav]")?.dataset.nav;
+  if (nav) { showReportStage(nav); return; }
   const act = e.target.closest("[data-act]")?.dataset.act;
   if (!act) return;
   if (act === "print") { window.print(); return; }
-  if (act === "new") toWorkspace({ reset: false });
-  else if (act === "edit") toWorkspace({ reset: false });
+  // "New assessment" keeps the entered data (as it always has) and opens on Context.
+  if (act === "new") { toWorkspace({ reset: false }); showStage("context"); }
+  else if (act === "edit") { toWorkspace({ reset: false }); showStage("evidence"); }
   else if (act === "retry") retry();
+});
+
+/** Switch the visible Review tab without re-rendering the report: every panel is
+ * already in the DOM, so no request is made and nothing is recomputed. */
+function selectTab(key, { focus = false } = {}) {
+  app.tab = key;
+  view.querySelectorAll("[data-tab]").forEach((t) => {
+    const on = t.dataset.tab === key;
+    t.setAttribute("aria-selected", String(on));
+    t.tabIndex = on ? 0 : -1;
+    if (on && focus) t.focus();
+  });
+  view.querySelectorAll(".tabpanel").forEach((p) => { p.hidden = p.id !== `panel-${key}`; });
+}
+
+view.addEventListener("keydown", (e) => {
+  const tab = e.target.closest("[data-tab]");
+  if (!tab || !["ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+  e.preventDefault();
+  const keys = [...view.querySelectorAll("[data-tab]")].map((t) => t.dataset.tab);
+  const i = keys.indexOf(tab.dataset.tab);
+  const next = e.key === "Home" ? 0 : e.key === "End" ? keys.length - 1
+    : (i + (e.key === "ArrowRight" ? 1 : keys.length - 1)) % keys.length;
+  selectTab(keys[next], { focus: true });
 });
 
 function retry() {

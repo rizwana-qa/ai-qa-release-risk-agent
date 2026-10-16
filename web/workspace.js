@@ -41,6 +41,10 @@ function freshState() {
     supportingDocuments: [],
     validation: null, // { missing:[], problems:[] }
     uploadError: "",
+    // Which of the two input screens is showing: "context" | "evidence". Pure
+    // presentation state; it never affects the payload or any validation rule.
+    stage: "context",
+    touched: { releaseScope: false, userStory: false, ac: false },
     busy: false,
     // True only for data loaded verbatim from a demo/regression scenario, not
     // yet touched by the user. The first edit clears it (see bind()), so an
@@ -86,6 +90,7 @@ function exampleState() {
   s.knownDefects = [
     { label: "DEF-77", severity: "high", status: "open", area: "checkout", security: false, description: "Fallback message not shown when the vault call times out (only on slow connections).", relatedAcs: ["AC4"] },
   ];
+  s.stage = state.stage;
   return s;
 }
 
@@ -118,8 +123,12 @@ export function loadScenario(ctx) {
     security: !!d.security, description: d.description || "", relatedAcs: d.relatedAcs || [],
   }));
   s.demoLoaded = true;
+  // The fixture's context is complete, so the user lands on Evidence, one click
+  // from the same Analyze button manual entry uses. Nothing is auto-analyzed.
+  s.stage = "evidence";
   state = s;
   renderForm();
+  onStateChange(getWorkflowState());
 }
 
 /** Real per-step workflow state for the sidebar (app.js), not decorative:
@@ -129,8 +138,24 @@ export function getWorkflowState() {
     contextComplete: sectionState("context").complete === true && sectionState("ac").complete === true,
     canAnalyze: canAnalyze(),
     demoLoaded: state.demoLoaded,
+    stage: state.stage,
   };
 }
+
+/** Switch between the two input screens. Evidence is only reachable once the
+ * Context section is complete — the same rule the old "Continue to Evidence"
+ * button enforced. Returns whether the switch happened. */
+export function showStage(name) {
+  if (name !== "context" && name !== "evidence") return false;
+  syncFromDom();
+  if (name === "evidence" && !contextReady()) return false;
+  state.stage = name;
+  renderForm();
+  window.scrollTo({ top: 0 });
+  root?.querySelector("#page-h")?.focus({ preventScroll: true });
+  return true;
+}
+
 
 /* ------------------------------- DOM syncing ------------------------------ */
 
@@ -142,23 +167,28 @@ function syncFromDom() {
   const q = (sel, ctx = root) => ctx.querySelector(sel);
   const qa = (sel, ctx = root) => [...ctx.querySelectorAll(sel)];
 
-  state.releaseName = val(q('[data-field="releaseName"]'));
-  state.releaseScope = val(q('[data-field="releaseScope"]'));
-  state.userStory = val(q('[data-field="userStory"]'));
-  // criticality is a custom listbox (see criticalityControl()), not a native
-  // input — its value lives directly in state.criticality, set by the
-  // crit-pick click/keyboard handlers, so there is nothing to read from the DOM.
+  // Only the screen that is showing has inputs in the DOM. Syncing the other
+  // screen's fields from an absent DOM would blank state the user already
+  // entered, so each stage reads back only its own sections.
+  if (state.stage === "context") {
+    state.releaseName = val(q('[data-field="releaseName"]'));
+    state.releaseScope = val(q('[data-field="releaseScope"]'));
+    state.userStory = val(q('[data-field="userStory"]'));
+    const crit = q('[data-field="criticality"]:checked');
+    if (crit && CRITICALITY.includes(crit.value)) state.criticality = crit.value;
 
-  state.acceptanceCriteria = qa('[data-group="ac"]').map((row) => ({
-    area: val(q('[data-field="area"]', row)),
-    critical: chk(q('[data-field="critical"]', row)),
-    text: val(q('[data-field="text"]', row)),
-  }));
-  if (state.acceptanceCriteria.length === 0) state.acceptanceCriteria = [blankAc()];
+    state.acceptanceCriteria = qa('[data-group="ac"]').map((row) => ({
+      area: val(q('[data-field="area"]', row)),
+      critical: chk(q('[data-field="critical"]', row)),
+      text: val(q('[data-field="text"]', row)),
+    }));
+    if (state.acceptanceCriteria.length === 0) state.acceptanceCriteria = [blankAc()];
 
-  state.businessRules = qa('[data-group="br"]').map((row) => ({
-    text: val(q('[data-field="text"]', row)),
-  }));
+    state.businessRules = qa('[data-group="br"]').map((row) => ({
+      text: val(q('[data-field="text"]', row)),
+    }));
+    return;
+  }
 
   state.testCases = qa('[data-group="tc"]').map((row) => ({
     label: val(q('[data-field="label"]', row)),
@@ -210,6 +240,11 @@ function canAnalyze() {
   return Boolean(state.releaseScope.trim() && state.userStory.trim() && acLabels().length >= 1);
 }
 
+/** The Context screen is complete under exactly the rule canAnalyze() uses. */
+function contextReady() {
+  return canAnalyze();
+}
+
 /* Per-section completion cue. Derived only from the SAME state canAnalyze() uses;
    no new validation rules. `complete` is a tri-state: true / false / null(optional). */
 function sectionState(kind) {
@@ -246,7 +281,13 @@ function sectionState(kind) {
 function sectionBadge(kind) {
   const s = sectionState(kind);
   const dc = s.complete === true ? ' data-complete="true"' : s.complete === false ? ' data-complete="false"' : "";
-  return `<span class="card-status" data-status-for="${kind}"${dc}>${s.complete === true ? ICONS.check : ""}<span>${esc(s.text)}</span></span>`;
+  return `<span class="card-status${statusMod(s)}" data-status-for="${kind}"${dc}>${s.complete === true ? ICONS.check : ""}<span>${esc(s.text)}</span></span>`;
+}
+
+/** Optional sections read quietly until something has been added. */
+function statusMod(s) {
+  if (s.complete !== null) return "";
+  return s.text === "Optional" ? " card-status--opt" : " card-status--has";
 }
 
 function refreshSectionBadges() {
@@ -254,6 +295,7 @@ function refreshSectionBadges() {
   root.querySelectorAll("[data-status-for]").forEach((el) => {
     const s = sectionState(el.dataset.statusFor);
     el.innerHTML = (s.complete === true ? ICONS.check : "") + `<span>${esc(s.text)}</span>`;
+    el.className = `card-status${statusMod(s)}`;
     if (s.complete === true) el.dataset.complete = "true";
     else if (s.complete === false) el.dataset.complete = "false";
     else el.removeAttribute("data-complete");
@@ -312,14 +354,14 @@ export function getPayload() {
 
 export function setValidation(v) {
   state.validation = v || null;
+  state.stage = "evidence"; // the Analyze button — and so the server's verdict — lives here
   renderForm();
   root?.querySelector(".validation")?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 export function setBusy(b) {
   state.busy = !!b;
-  const btn = root?.querySelector('[data-act="analyze"]');
-  if (btn) btn.disabled = b || !canAnalyze();
+  patchActionBar();
 }
 
 /* -------------------------------- markup -------------------------------- */
@@ -329,103 +371,94 @@ const opt = (list, cur, labelFn = upper) =>
 
 const humanStatus = (s) => ({ "not-run": "Not run", "in-progress": "In progress" }[s] || upper(s));
 
-/* Custom-rendered listbox for Criticality, replacing a native <select>. A
-   native select's solid-fill options can't be styled once the browser's own
-   open-list hover/selection highlight takes over (a platform limitation, not
-   a CSS bug) — this gives every option a fixed, always-correct solid color. */
+const STAGE_COPY = {
+  context: {
+    title: "Context, scope & metadata",
+    sub: "Describe the release you want assessed. The agent analyses only what you supply; it does not run your application, browse URLs or execute tests.",
+  },
+  evidence: {
+    title: "Evidence, tests & known defects",
+    sub: "Add the QA evidence you already have. Missing evidence is reported as a finding, never invented.",
+  },
+};
+
+/** Criticality is a segmented radio group: all four options stay visible and
+ * keyboard-operable (arrow keys), same values and the same HIGH default. */
 function criticalityControl(rawCur) {
   const cur = CRITICALITY.includes(rawCur) ? rawCur : "high";
-  // The current value is already shown on the trigger itself, so the open
-  // list only offers the other three — no repeated/duplicate entry.
-  const options = CRITICALITY.filter((v) => v !== cur).map((v) => `<li
-      role="option" class="crit-opt crit-opt--${v}"
-      data-act="crit-pick" data-value="${attr(v)}" tabindex="-1"
-    ><span>${esc(upper(v))}</span></li>`).join("");
-  return `<div class="crit-select" data-crit-select>
-    <button type="button" id="f-crit" class="crit-select__trigger select--criticality"
-      data-act="crit-toggle" aria-haspopup="listbox" aria-expanded="false">
-      <span>${esc(upper(cur))}</span>${ICONS.chevron}
-    </button>
-    <ul class="crit-select__list" role="listbox" aria-label="Criticality" hidden>${options}</ul>
-  </div>`;
+  return `<div class="seg" role="radiogroup" aria-labelledby="f-crit-label">${CRITICALITY.map((v) =>
+    `<label>${esc(upper(v))}<input type="radio" name="criticality" value="${attr(v)}" data-field="criticality"${v === cur ? " checked" : ""} /></label>`).join("")}</div>`;
 }
 
 function coversPicker(field, selected) {
   const acs = acLabels();
-  if (!acs.length) return `<span class="field__hint">Add acceptance criteria to link coverage.</span>`;
+  const title = field === "covers" ? "Covers:" : "Related AC:";
+  if (!acs.length) return `<div class="covers"><span class="covers__t">${title}</span><span class="field__hint">Add acceptance criteria to link coverage.</span></div>`;
   const set = new Set(selected || []);
-  return `<div class="covers">${acs.map((x) =>
-    `<label class="${set.has(x.id) ? "on" : ""}">
+  return `<div class="covers" role="group" aria-label="${field === "covers" ? "Covers" : "Related acceptance criteria"}"><span class="covers__t">${title}</span>${acs.map((x) =>
+    `<label class="${set.has(x.id) ? "on" : ""}">${esc(x.id)}
       <input type="checkbox" data-field="${field}" value="${attr(x.id)}"${set.has(x.id) ? " checked" : ""} />
-      ${esc(x.id)}
     </label>`).join("")}</div>`;
 }
 
 function acRow(ac, i, total) {
   return `<div class="row row--ac" data-group="ac" data-index="${i}">
-    <div class="row__id">AC${i + 1}</div>
+    <div class="row__id" aria-hidden="true">AC${i + 1}</div>
     <div class="row__main">
-      <textarea class="textarea" data-field="text" rows="2"
+      <textarea class="textarea" data-field="text" rows="2" aria-label="Acceptance criterion ${i + 1}"
         placeholder="Describe the acceptance criterion…">${esc(ac.text)}</textarea>
       <div class="row__meta">
-        <input class="input input--sm" data-field="area" value="${attr(ac.area)}" placeholder="Area (e.g. payments)" />
+        <input class="input" data-field="area" value="${attr(ac.area)}" aria-label="Area for AC${i + 1}" placeholder="Area (e.g. payments)" />
         <label class="checkbox"><input type="checkbox" data-field="critical"${ac.critical ? " checked" : ""} /> Critical</label>
       </div>
     </div>
     <div class="row__tools">
-      <button class="iconbtn" type="button" data-act="ac-up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Move up">${ICONS.up}</button>
-      <button class="iconbtn" type="button" data-act="ac-down" data-index="${i}" ${i === total - 1 ? "disabled" : ""} aria-label="Move down">${ICONS.down}</button>
-      <button class="iconbtn iconbtn--danger" type="button" data-act="ac-del" data-index="${i}" aria-label="Delete">${ICONS.trash}</button>
+      <button class="iconbtn" type="button" data-act="ac-up" data-index="${i}" ${i === 0 ? "disabled" : ""} aria-label="Move AC${i + 1} up">${ICONS.up}</button>
+      <button class="iconbtn" type="button" data-act="ac-down" data-index="${i}" ${i === total - 1 ? "disabled" : ""} aria-label="Move AC${i + 1} down">${ICONS.down}</button>
+      <button class="iconbtn iconbtn--danger" type="button" data-act="ac-del" data-index="${i}" aria-label="Delete AC${i + 1}">${ICONS.trash}</button>
     </div>
   </div>`;
 }
 
 function brRow(br, i) {
-  return `<div class="row row--pair" data-group="br" data-index="${i}">
-    <input class="input" data-field="text" value="${attr(br.text)}" placeholder="Business rule (context only, does not change the release gate)" />
-    <button class="iconbtn iconbtn--danger" type="button" data-act="br-del" data-index="${i}" aria-label="Delete">${ICONS.trash}</button>
+  return `<div class="row row--br" data-group="br" data-index="${i}">
+    <input class="input" data-field="text" value="${attr(br.text)}" aria-label="Business rule ${i + 1}" placeholder="Business rule (context only, does not change the release gate)" />
+    <button class="iconbtn iconbtn--danger" type="button" data-act="br-del" data-index="${i}" aria-label="Delete business rule ${i + 1}">${ICONS.trash}</button>
   </div>`;
 }
 
 function tcRow(t, i) {
-  return `<div class="row row--pair" data-group="tc" data-index="${i}">
+  return `<div class="row row--item" data-group="tc" data-index="${i}">
     <div class="row__main">
-      <div class="row__meta">
-        <input class="input input--sm" data-field="label" value="${attr(t.label)}" placeholder="Test ID" />
-        <input class="input input--grow" data-field="title" value="${attr(t.title)}" placeholder="Test title" />
+      <div class="rgrid">
+        <input class="input" data-field="label" value="${attr(t.label)}" aria-label="Test ID ${i + 1}" placeholder="Test ID" />
+        <input class="input col-title" data-field="title" value="${attr(t.title)}" aria-label="Test title ${i + 1}" placeholder="Test title" />
+        <input class="input" data-field="area" value="${attr(t.area)}" aria-label="Test area ${i + 1}" placeholder="Area" />
+        <select class="select" data-field="testType" aria-label="Test type ${i + 1}">${opt(TEST_TYPES, t.testType)}</select>
+        <select class="select" data-field="status" aria-label="Test status ${i + 1}">${opt(TEST_STATUS, t.status, humanStatus)}</select>
       </div>
-      <div class="row__meta">
-        <input class="input input--sm" data-field="area" value="${attr(t.area)}" placeholder="Area" />
-        <select class="select" data-field="testType">${opt(TEST_TYPES, t.testType)}</select>
-        <select class="select" data-field="status">${opt(TEST_STATUS, t.status, humanStatus)}</select>
-      </div>
-      <div class="row__meta"><span class="field__hint">Covers:</span>${coversPicker("covers", t.covers)}</div>
+      ${coversPicker("covers", t.covers)}
     </div>
-    <div class="row__tools">
-      <button class="iconbtn iconbtn--danger" type="button" data-act="tc-del" data-index="${i}" aria-label="Delete test">${ICONS.trash}</button>
-    </div>
+    <button class="iconbtn iconbtn--danger" type="button" data-act="tc-del" data-index="${i}" aria-label="Delete test ${i + 1}">${ICONS.trash}</button>
   </div>`;
 }
 
 function dfRow(d, i) {
   const sev = SEVERITIES.includes(d.severity) ? d.severity : "medium";
   const st = DEFECT_STATUS.includes(d.status) ? d.status : "open";
-  return `<div class="row row--pair row--defect" data-group="df" data-index="${i}" data-severity="${attr(sev)}" data-status="${attr(st)}">
+  return `<div class="row row--item row--defect" data-group="df" data-index="${i}" data-severity="${attr(sev)}" data-status="${attr(st)}">
     <div class="row__main">
-      <div class="row__meta">
-        <input class="input input--sm" data-field="label" value="${attr(d.label)}" placeholder="Defect ID" />
-        <span class="sev-dot" data-sev="${attr(sev)}" aria-hidden="true"></span>
-        <select class="select select--severity" data-field="severity" aria-label="Severity">${opt(SEVERITIES, d.severity)}</select>
-        <select class="select select--status" data-field="status" aria-label="Status">${opt(DEFECT_STATUS, d.status)}</select>
-        <input class="input input--sm" data-field="area" value="${attr(d.area)}" placeholder="Area" />
+      <div class="rgrid rgrid--d">
+        <input class="input" data-field="label" value="${attr(d.label)}" aria-label="Defect ID ${i + 1}" placeholder="Defect ID" />
+        <select class="select" data-field="severity" aria-label="Defect severity ${i + 1}">${opt(SEVERITIES, d.severity)}</select>
+        <select class="select" data-field="status" aria-label="Defect status ${i + 1}">${opt(DEFECT_STATUS, d.status)}</select>
+        <input class="input" data-field="area" value="${attr(d.area)}" aria-label="Defect area ${i + 1}" placeholder="Area" />
         <label class="checkbox"><input type="checkbox" data-field="security"${d.security ? " checked" : ""} /> Security issue</label>
       </div>
-      <textarea class="textarea" data-field="description" rows="2" placeholder="Defect description">${esc(d.description)}</textarea>
-      <div class="row__meta"><span class="field__hint">Related AC:</span>${coversPicker("relatedAcs", d.relatedAcs)}</div>
+      <div class="field" style="margin:10px 0 0"><textarea class="textarea" data-field="description" rows="2" aria-label="Defect description ${i + 1}" placeholder="Defect description">${esc(d.description)}</textarea></div>
+      ${coversPicker("relatedAcs", d.relatedAcs)}
     </div>
-    <div class="row__tools">
-      <button class="iconbtn iconbtn--danger" type="button" data-act="df-del" data-index="${i}" aria-label="Delete defect">${ICONS.trash}</button>
-    </div>
+    <button class="iconbtn iconbtn--danger" type="button" data-act="df-del" data-index="${i}" aria-label="Delete defect ${i + 1}">${ICONS.trash}</button>
   </div>`;
 }
 
@@ -444,7 +477,7 @@ function docChips() {
       <span class="doc-chip__name">${esc(d.name)}</span>
       <span class="doc-chip__size">${esc(fmtBytes(d.size))}</span>
       <span class="ref">${esc(d.note ? "note" : REFERENCE_EXT.includes(d.type) ? "reference only" : d.type)}</span>
-      <button class="iconbtn" type="button" data-act="doc-del" data-index="${i}" aria-label="Remove ${attr(d.name)}">${ICONS.x}</button>
+      <button class="iconbtn" type="button" data-act="doc-del" data-index="${i}" aria-label="Remove ${attr(d.name)}" style="width:30px;height:30px">${ICONS.x}</button>
     </span>`).join("")}</div>`;
 }
 
@@ -458,85 +491,107 @@ function validationBlock() {
   </div>`;
 }
 
-function previewBlock() {
-  const p = livePreview();
-  const tile = (n, t, flag = false) =>
-    `<div class="stat${flag ? " stat--flag" : ""}"><div class="stat__n">${n}</div><div class="stat__t">${t}</div></div>`;
-  return `<div class="divider"></div>
-  <span class="eyebrow">Live evidence summary: preview of what you've entered</span>
-  <div class="stats">
-    ${tile(p.totalTests, "Test cases")}
-    ${tile(p.passed, "Passing")}
-    ${tile(p.failed, "Failing", p.failed > 0)}
-    ${tile(p.blocked, "Blocked", p.blocked > 0)}
-    ${tile(p.covered + " / " + p.criteria, "Criteria with a passing test")}
-    ${tile(p.uncovered, "Uncovered criteria", p.uncovered > 0)}
-  </div>
-  <p class="field__hint" style="margin-top:10px">Coverage percentages, risk levels and the release decision are computed by the backend QA rules, not here.</p>`;
-}
-
-/** Real, explicit "what's here / what's missing" for the Evidence step — never
- * hides an absence, never invents a count. Shown once Context is valid. */
+/** Real, explicit "what's here / what's missing" for the Evidence stage — never
+ * hides an absence, never invents a count. Plain counts of what was entered;
+ * the authoritative numbers come back from the backend. */
 function evidenceSummaryBlock() {
-  if (!sectionState("context").complete) return "";
   const p = livePreview();
   const docsN = state.supportingDocuments.length;
   const executed = state.testCases.filter((t) => t.status !== "not-run" && (t.title.trim() || t.label.trim())).length;
-  const tile = (n, label, warn) => `<div class="stat${warn ? " stat--flag" : ""}"><div class="stat__n">${n}</div><div class="stat__t">${esc(label)}</div></div>`;
+  const defectsN = state.knownDefects.filter((d) => d.description.trim() || d.label.trim()).length;
+  const tile = (n, label, flag = false) =>
+    `<div class="stat${flag ? " stat--flag" : ""}"><div class="stat__n">${n}</div><div class="stat__t">${esc(label)}</div></div>`;
   const noEvidence = p.totalTests === 0;
-  return `<div class="card card--evidence-status">
-    <div class="card__head"><span class="ico">${ICONS.clipboard}</span><h2>Evidence provided so far</h2></div>
-    <div class="card__body">
-      <div class="evstats">
-        ${tile(p.totalTests, "Test cases provided", p.totalTests === 0)}
-        ${tile(executed, "Execution results provided", executed === 0)}
-        ${tile(state.knownDefects.filter((d) => d.description.trim() || d.label.trim()).length, "Defects provided")}
-        ${tile(docsN, "Supporting documents provided")}
-      </div>
-      ${noEvidence
-        ? `<div class="banner banner--warn mt-3"><span class="ico">${ICONS.alert}</span>
-           <div><b>No test execution evidence has been provided.</b> This is not evidence of low risk. The assessment
-           will state that verification evidence is missing rather than assume the release is safe.</div></div>`
-        : `<p class="field__hint mt-3">Coverage percentages and the release decision are computed by the backend QA rules from exactly what's listed above.</p>`}
+  return `<div class="evstats">
+      ${tile(p.totalTests, "Test cases provided", p.totalTests === 0)}
+      ${tile(executed, "Execution results provided", executed === 0)}
+      ${tile(defectsN, "Defects provided")}
+      ${tile(docsN, "Supporting documents provided")}
     </div>
+    ${noEvidence
+      ? `<div class="banner banner--warn mt-3" style="margin-bottom:0"><span class="ico">${ICONS.alert}</span>
+         <div><b>No test execution evidence has been provided.</b> This is not evidence of low risk. The assessment
+         will state that verification evidence is missing rather than assume the release is safe.</div></div>`
+      : `<div class="stats mt-3">
+          ${tile(p.passed, "Passing")}
+          ${tile(p.failed, "Failing", p.failed > 0)}
+          ${tile(p.blocked, "Blocked", p.blocked > 0)}
+          ${tile(p.covered + " / " + p.criteria, "Criteria with a passing test")}
+          ${tile(p.uncovered, "Uncovered criteria", p.uncovered > 0)}
+        </div>
+        <p class="field__hint mt-3">A count of what you've entered. Coverage percentages, risk levels and the release decision are computed by the backend QA rules, not here.</p>`}`;
+}
+
+const errLine = (id, text) => `<span class="field__err" id="${id}" data-err="${id}">${ICONS.alert} ${esc(text)}</span>`;
+
+function toolsBlock() {
+  return `<div class="tools">
+    <button class="btn btn--ghost btn--sm" type="button" data-act="load-example">Load example</button>
+    <button class="btn btn--ghost btn--sm" type="button" data-act="clear">Clear all</button>
   </div>`;
 }
 
-function continueToEvidenceBlock() {
-  const ready = sectionState("context").complete;
-  return `<div class="ws__continue" data-continue-block>
-    <button class="btn btn--ghost" type="button" data-act="continue-evidence" ${ready ? "" : "disabled"}>Continue to Evidence ${ICONS.chevron}</button>
-    <p class="field__hint" data-continue-hint ${ready ? "hidden" : ""}>${ICONS.info} Complete release scope, user story, and at least one acceptance criterion to continue to Evidence.</p>
+function pageHead() {
+  const c = STAGE_COPY[state.stage];
+  const n = state.stage === "context" ? 1 : 2;
+  return `<div class="pagehead">
+    <div><span class="eyebrow">Stage ${n} of 5</span><h1 id="page-h" tabindex="-1">${c.title}</h1><p>${c.sub}</p></div>
+    ${toolsBlock()}
   </div>`;
 }
 
-function refreshContinueBlock() {
-  const wrap = root?.querySelector("[data-continue-block]");
-  if (!wrap) return;
-  const ready = sectionState("context").complete;
-  const btn = wrap.querySelector('[data-act="continue-evidence"]');
-  const hint = wrap.querySelector("[data-continue-hint]");
-  if (btn) btn.disabled = !ready;
-  if (hint) hint.hidden = ready;
-  wrap.classList.toggle("ws__continue--locked", !ready);
+function actionBarInner() {
+  if (state.stage === "context") {
+    const ready = contextReady();
+    return `<div class="actbar__hint">${ready
+      ? "<b>Context complete.</b> Continue to add QA evidence."
+      : `${ICONS.info} Complete release scope, user story, and at least one acceptance criterion to continue to Evidence.`}</div>
+    <div class="actbar__btns">
+      <button class="btn" type="button" data-act="continue-evidence" ${ready ? "" : 'aria-disabled="true"'}>Continue to Evidence →</button>
+    </div>`;
+  }
+  const can = canAnalyze() && !state.busy;
+  return `<div class="actbar__hint">${canAnalyze()
+    ? "<b>Ready.</b> The pipeline will normalise your input, run the QA analysis, and evaluate the deterministic release gate."
+    : "Add a release scope, a user story, and at least one acceptance criterion to enable analysis."}</div>
+  <div class="actbar__btns">
+    <button class="btn btn--ghost" type="button" data-act="back-to-context">← Context</button>
+    <button class="btn btn--lg" type="button" data-act="analyze" ${can ? "" : "disabled"} ${state.busy ? 'aria-busy="true"' : ""}>
+      ${state.busy ? ICONS.spinner : ICONS.play} Analyze Release Risk
+    </button>
+  </div>`;
 }
 
-function formHtml() {
+// What the action bar and evidence summary last rendered. They are patched in
+// place on every input, but only when their content actually changed: replacing
+// a button between mouse-down and mouse-up (blur fires `change`, which lands
+// here) would swallow the click.
+let lastBarHtml = "";
+let lastPreviewHtml = "";
+
+function actionBar() {
+  lastBarHtml = actionBarInner();
+  return `<div class="actbar"><div class="container actbar__in" data-actbar>${lastBarHtml}</div></div>`;
+}
+
+function patchActionBar() {
+  const bar = root?.querySelector("[data-actbar]");
+  if (!bar) return;
+  const html = actionBarInner();
+  if (html === lastBarHtml) return;
+  lastBarHtml = html;
+  bar.innerHTML = html;
+}
+
+function contextStageHtml() {
   const acs = state.acceptanceCriteria;
+  const t = state.touched;
+  const scopeBad = t.releaseScope && !state.releaseScope.trim();
+  const storyBad = t.userStory && !state.userStory.trim();
+  const acBad = t.ac && acLabels().length === 0;
   return `
-  <div class="ws">
-    <div class="ws__intro">
-      <span class="eyebrow">Release Risk Assessment Workspace</span>
-      <h1>QA Release Risk Assessment</h1>
-      <p>Provide the release context and your QA evidence. The agent analyses what you supply and a deterministic QA gate produces the release decision. It does not run your application, browse URLs, or execute tests.</p>
-      <div class="ws__flow"><span>Provide context</span><span>Add QA evidence</span><span>Analyze</span><span>Review release risk</span></div>
-    </div>
-
-    ${validationBlock()}
-
-    <div id="ws-context-anchor"></div>
-    <section class="card">
-      <div class="card__head"><span class="step-badge">01</span><h2>Release context</h2>${sectionBadge("context")}</div>
+    <section class="card" aria-labelledby="h-ctx">
+      <div class="card__head"><span class="ico">${ICONS.book}</span><h2 id="h-ctx">Release context</h2>${sectionBadge("context")}</div>
       <div class="card__body">
         <div class="grid-2">
           <div class="field">
@@ -544,62 +599,74 @@ function formHtml() {
             <input class="input" id="f-name" data-field="releaseName" value="${attr(state.releaseName)}" placeholder="e.g. Checkout 3.4" />
           </div>
           <div class="field" data-criticality="${attr(CRITICALITY.includes(state.criticality) ? state.criticality : "high")}">
-            <label class="field__label" for="f-crit">Criticality</label>
+            <span class="field__label" id="f-crit-label">Criticality</span>
             ${criticalityControl(state.criticality)}
+            <span class="field__hint">Default is HIGH.</span>
           </div>
         </div>
         <div class="field">
-          <label class="field__label" for="f-scope">Release scope / change purpose <span class="req">*</span></label>
-          <textarea class="textarea" id="f-scope" data-field="releaseScope" rows="3" placeholder="What is changing in this release and why?">${esc(state.releaseScope)}</textarea>
+          <label class="field__label" for="f-scope">Release scope / change purpose <span class="req" aria-hidden="true">*</span><span class="sr-only">required</span></label>
+          <textarea class="textarea" id="f-scope" data-field="releaseScope" rows="3" aria-describedby="err-scope" ${scopeBad ? 'aria-invalid="true"' : ""} placeholder="What is changing in this release and why?">${esc(state.releaseScope)}</textarea>
+          <span ${scopeBad ? "" : "hidden"}>${errLine("err-scope", "Release scope is required.")}</span>
         </div>
         <div class="field">
-          <label class="field__label" for="f-story">User story / requirement <span class="req">*</span></label>
-          <textarea class="textarea" id="f-story" data-field="userStory" rows="3" placeholder="As a … I want … so that …">${esc(state.userStory)}</textarea>
+          <label class="field__label" for="f-story">User story / requirement <span class="req" aria-hidden="true">*</span><span class="sr-only">required</span></label>
+          <textarea class="textarea" id="f-story" data-field="userStory" rows="3" aria-describedby="err-story" ${storyBad ? 'aria-invalid="true"' : ""} placeholder="As a … I want … so that …">${esc(state.userStory)}</textarea>
+          <span ${storyBad ? "" : "hidden"}>${errLine("err-story", "User story is required.")}</span>
         </div>
       </div>
     </section>
 
-    <section class="card">
-      <div class="card__head"><span class="ico">${ICONS.list}</span><h2>Acceptance criteria</h2>${sectionBadge("ac")}</div>
+    <section class="card" aria-labelledby="h-ac">
+      <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="h-ac">Acceptance criteria</h2>${sectionBadge("ac")}</div>
       <div class="card__body">
         <div class="rows">${acs.map((ac, i) => acRow(ac, i, acs.length)).join("")}</div>
+        <span ${acBad ? "" : "hidden"}>${errLine("err-ac", "Add at least one acceptance criterion.")}</span>
         <button class="addrow" type="button" data-act="ac-add">${ICONS.plus} Add acceptance criteria</button>
       </div>
     </section>
 
-    <section class="card">
-      <div class="card__head"><span class="ico">${ICONS.book}</span><h2>Business rules</h2>${sectionBadge("br")}</div>
+    <section class="card" aria-labelledby="h-br">
+      <div class="card__head"><span class="ico">${ICONS.book}</span><h2 id="h-br">Business rules</h2>${sectionBadge("br")}</div>
       <div class="card__body">
-        ${state.businessRules.length ? `<div class="rows">${state.businessRules.map(brRow).join("")}</div>` : `<p class="field__hint">No business rules added. These are recorded as context and never modify the release gate.</p>`}
+        ${state.businessRules.length
+          ? `<div class="rows">${state.businessRules.map(brRow).join("")}</div>`
+          : `<div class="empty"><span class="ico">${ICONS.info}</span><div><b>No business rules added</b>These are recorded as context and never modify the release gate.</div></div>`}
         <button class="addrow" type="button" data-act="br-add">${ICONS.plus} Add business rule</button>
       </div>
+    </section>`;
+}
+
+function evidenceStageHtml() {
+  return `
+    ${validationBlock()}
+    <section class="card card--evidence-status" aria-labelledby="h-evs">
+      <div class="card__head"><span class="ico">${ICONS.clipboard}</span><h2 id="h-evs">Evidence provided so far</h2></div>
+      <div class="card__body" data-preview>${(lastPreviewHtml = evidenceSummaryBlock())}</div>
     </section>
 
-    ${continueToEvidenceBlock()}
-
-    <div id="ws-evidence-anchor"></div>
-    <p class="ws__stepback"><button class="linkbtn" type="button" data-act="back-to-context">← Back to Context</button></p>
-    ${evidenceSummaryBlock()}
-
-    <section class="card">
-      <div class="card__head"><span class="step-badge">02</span><h2>QA evidence · existing test cases</h2>${sectionBadge("tests")}</div>
+    <section class="card" aria-labelledby="h-tc">
+      <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="h-tc">QA evidence · existing test cases</h2>${sectionBadge("tests")}</div>
       <div class="card__body">
-        ${state.testCases.length ? `<div class="rows">${state.testCases.map(tcRow).join("")}</div>` : `<p class="field__hint">No test cases added. If you leave this empty the report will state that evidence is insufficient. It will not invent any tests.</p>`}
+        ${state.testCases.length
+          ? `<div class="rows">${state.testCases.map(tcRow).join("")}</div>`
+          : `<div class="empty"><span class="ico">${ICONS.info}</span><div><b>No test cases added</b>If you leave this empty the report will state that evidence is insufficient. It will not invent any tests.</div></div>`}
         <button class="addrow" type="button" data-act="tc-add">${ICONS.plus} Add test case</button>
-        ${previewBlock()}
       </div>
     </section>
 
-    <section class="card">
-      <div class="card__head"><span class="ico">${ICONS.bug}</span><h2>Known defects</h2>${sectionBadge("defects")}</div>
+    <section class="card" aria-labelledby="h-df">
+      <div class="card__head"><span class="ico">${ICONS.bug}</span><h2 id="h-df">Known defects</h2>${sectionBadge("defects")}</div>
       <div class="card__body">
-        ${state.knownDefects.length ? `<div class="rows">${state.knownDefects.map(dfRow).join("")}</div>` : `<p class="field__hint">No known defects added.</p>`}
+        ${state.knownDefects.length
+          ? `<div class="rows">${state.knownDefects.map(dfRow).join("")}</div>`
+          : `<div class="empty"><span class="ico">${ICONS.info}</span><div><b>No known defects added</b>Add open or closed defects so the analysis can account for them.</div></div>`}
         <button class="addrow" type="button" data-act="df-add">${ICONS.plus} Add defect</button>
       </div>
     </section>
 
-    <section class="card">
-      <div class="card__head"><span class="ico">${ICONS.upload}</span><h2>Supporting documents</h2>${sectionBadge("docs")}</div>
+    <section class="card" aria-labelledby="h-docs">
+      <div class="card__head"><span class="ico">${ICONS.upload}</span><h2 id="h-docs">Supporting documents</h2>${sectionBadge("docs")}</div>
       <div class="card__body">
         <div class="dropzone" data-drop>
           <span class="dropzone__icon">${ICONS.upload}</span>
@@ -607,7 +674,7 @@ function formHtml() {
           <p class="field__hint">${TEXT_EXT.join(", ")} are parsed into rows or notes. ${REFERENCE_EXT.join(", ")} are attached as references only (no document parsing). Executable and script files are rejected.</p>
           <input type="file" data-file-input multiple accept=".json,.csv,.txt,.pdf,.docx,.xlsx" hidden />
         </div>
-        ${state.uploadError ? `<p class="validation" style="margin-top:12px">${esc(state.uploadError)}</p>` : ""}
+        ${state.uploadError ? `<div class="validation" role="alert" style="margin:12px 0 0">${esc(state.uploadError)}</div>` : ""}
         ${docChips()}
         <p class="field__hint" style="margin-top:12px">Templates:
           <button class="linkbtn" type="button" data-act="tpl-tc">test cases CSV</button> ·
@@ -616,17 +683,15 @@ function formHtml() {
       </div>
     </section>
 
-    <div class="ws__cta">
-      <p class="ws__stepback"><button class="linkbtn" type="button" data-act="back-to-evidence">← Back to Evidence</button></p>
-      <button class="btn btn--primary btn--lg" type="button" data-act="analyze" ${canAnalyze() && !state.busy ? "" : "disabled"}>
-        ${state.busy ? ICONS.spinner : ICONS.play} Analyze Release Risk
-      </button>
-      <p>${canAnalyze()
-        ? "Ready. The pipeline will normalise your input, run the QA analysis, and evaluate the deterministic release gate."
-        : "Add a release scope, a user story, and at least one acceptance criterion to enable analysis."}</p>
-      <p class="ws__cta-trust">${ICONS.shield} Runs locally against your submitted evidence only. No application is executed and no external service is called.</p>
-      <p class="ws__cta-links"><button class="linkbtn" type="button" data-act="load-example">Load example</button> · <button class="linkbtn" type="button" data-act="clear">Clear all</button></p>
-    </div>
+    <p class="foot-note">${ICONS.shield} Runs locally against your submitted evidence only. No application is executed and no external service is called.</p>`;
+}
+
+function formHtml() {
+  return `
+  <div class="ws">
+    ${pageHead()}
+    ${state.stage === "context" ? contextStageHtml() : evidenceStageHtml()}
+    ${actionBar()}
   </div>`;
 }
 
@@ -645,7 +710,7 @@ function renderForm() {
 
   if (key && key.field) {
     let sel = null;
-    if (key.top) sel = root.querySelector(`[data-field="${key.field}"]`);
+    if (key.top) sel = root.querySelector(`[data-field="${key.field}"]${key.field === "criticality" ? ":checked" : ""}`);
     else if (key.group != null) sel = root.querySelector(`[data-group][data-index="${key.group}"] [data-field="${key.field}"]`);
     if (sel) {
       sel.focus();
@@ -654,24 +719,16 @@ function renderForm() {
   }
 }
 
-let lastContextComplete = null;
-
+/** Patch the parts of the screen that depend on the form's validity without
+ * rebuilding the inputs (so focus and caret stay put while typing). */
 function updateDerived() {
-  const contextComplete = sectionState("context").complete;
-  // The "Continue to Evidence" button and the Evidence-provided-so-far panel
-  // only exist in the DOM once Context becomes valid — a full re-render is
-  // needed exactly when that boolean flips (not on every keystroke).
-  if (lastContextComplete !== null && contextComplete !== lastContextComplete) {
-    lastContextComplete = contextComplete;
-    renderForm();
-    return;
-  }
-  lastContextComplete = contextComplete;
-
-  const btn = root?.querySelector('[data-act="analyze"]');
-  if (btn) btn.disabled = state.busy || !canAnalyze();
+  patchActionBar();
   refreshSectionBadges();
-  refreshContinueBlock();
+  const pv = root?.querySelector("[data-preview]");
+  if (pv) {
+    const html = evidenceSummaryBlock();
+    if (html !== lastPreviewHtml) { lastPreviewHtml = html; pv.innerHTML = html; }
+  }
   onStateChange(getWorkflowState());
 }
 
@@ -703,16 +760,16 @@ async function handleFiles(fileList) {
   renderForm();
 }
 
-function closeCritDropdown() {
-  const list = root?.querySelector(".crit-select__list");
-  if (!list || list.hidden) return;
-  list.hidden = true;
-  root.querySelector(".crit-select__trigger")?.setAttribute("aria-expanded", "false");
+/** Continue is aria-disabled (not disabled) while the context is incomplete so
+ * that pressing it explains what is missing instead of doing nothing. */
+function explainMissingContext() {
+  state.touched = { releaseScope: true, userStory: true, ac: true };
+  renderForm();
+  const first = !state.releaseScope.trim() ? "#f-scope" : !state.userStory.trim() ? "#f-story" : '[data-group="ac"] textarea';
+  root.querySelector(first)?.focus();
 }
 
 function onClick(e) {
-  if (!e.target.closest(".crit-select")) closeCritDropdown();
-
   const t = e.target.closest("[data-act]");
   if (!t) return;
   const act = t.dataset.act;
@@ -720,17 +777,6 @@ function onClick(e) {
   syncFromDom();
 
   switch (act) {
-    case "crit-toggle": {
-      const list = t.closest(".crit-select").querySelector(".crit-select__list");
-      const willOpen = list.hidden;
-      list.hidden = !willOpen;
-      t.setAttribute("aria-expanded", String(willOpen));
-      if (willOpen) list.querySelector(".crit-opt")?.focus();
-      return;
-    }
-    case "crit-pick":
-      state.criticality = t.dataset.value;
-      break;
     case "ac-add": state.acceptanceCriteria.push(blankAc()); break;
     case "ac-del": state.acceptanceCriteria.splice(idx, 1); if (!state.acceptanceCriteria.length) state.acceptanceCriteria.push(blankAc()); break;
     case "ac-up": move(state.acceptanceCriteria, idx, -1); break;
@@ -745,11 +791,11 @@ function onClick(e) {
     case "load-example": state = exampleState(); break;
     case "clear": state = freshState(); break;
     case "continue-evidence":
-    case "back-to-evidence":
-      root.querySelector("#ws-evidence-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      if (!contextReady()) { explainMissingContext(); return; }
+      showStage("evidence");
       return;
     case "back-to-context":
-      root.querySelector("#ws-context-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      showStage("context");
       return;
     case "pick-file": root.querySelector("[data-file-input]")?.click(); return;
     case "tpl-tc": downloadText("qa-test-cases-template.csv", TEMPLATES["qa-test-cases-template.csv"]); return;
@@ -770,47 +816,36 @@ function bind() {
   // changed something the backend would otherwise ignore.
   const clearDemoFlag = () => { if (state.demoLoaded) state.demoLoaded = false; };
 
-  root.addEventListener("input", () => { clearDemoFlag(); syncFromDom(); updateDerived(); });
+  root.addEventListener("input", (e) => {
+    clearDemoFlag(); syncFromDom();
+    // A required field that is typed into stops showing its error immediately.
+    if (e.target.matches("#f-scope, #f-story") && e.target.value.trim()) {
+      e.target.removeAttribute("aria-invalid");
+      e.target.parentElement.querySelector("[data-err]")?.parentElement.setAttribute("hidden", "");
+    }
+    updateDerived();
+  });
   root.addEventListener("change", (e) => {
     clearDemoFlag();
-    // Some controls change how the form should *look* (covers chips, the defect
-    // severity/status accents, the live evidence counts).
-    // A full re-render is simplest and preserves focus + caret via renderForm().
+    // Some controls change how the form should *look* (covers chips, the live
+    // evidence counts). A full re-render preserves focus + caret via renderForm().
     if (e.target.matches('[data-field="covers"], [data-field="relatedAcs"], [data-field="critical"], [data-field="severity"], [data-field="status"]')) {
       syncFromDom(); renderForm();
     } else {
       syncFromDom(); updateDerived();
     }
   });
-  root.addEventListener("click", onClick);
-  root.addEventListener("keydown", (e) => {
-    const trigger = e.target.closest(".crit-select__trigger");
-    if (trigger) {
-      if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        const list = trigger.closest(".crit-select").querySelector(".crit-select__list");
-        list.hidden = false;
-        trigger.setAttribute("aria-expanded", "true");
-        list.querySelector(".crit-opt")?.focus();
-      } else if (e.key === "Escape") {
-        closeCritDropdown();
-      }
-      return;
-    }
-    const optEl = e.target.closest(".crit-opt");
-    if (!optEl) return;
-    const list = optEl.closest(".crit-select__list");
-    const opts = [...list.querySelectorAll(".crit-opt")];
-    const i = opts.indexOf(optEl);
-    if (e.key === "ArrowDown") { e.preventDefault(); opts[Math.min(i + 1, opts.length - 1)].focus(); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); opts[Math.max(i - 1, 0)].focus(); }
-    else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); state.criticality = optEl.dataset.value; renderForm(); }
-    else if (e.key === "Escape") {
-      e.preventDefault();
-      closeCritDropdown();
-      list.closest(".crit-select").querySelector(".crit-select__trigger")?.focus();
-    }
+  root.addEventListener("focusout", (e) => {
+    const id = e.target?.id;
+    if (id !== "f-scope" && id !== "f-story") return;
+    const key = id === "f-scope" ? "releaseScope" : "userStory";
+    if (state.touched[key] || e.target.value.trim()) return;
+    state.touched[key] = true;
+    e.target.setAttribute("aria-invalid", "true");
+    const err = e.target.parentElement.querySelector("[data-err]");
+    err?.parentElement.removeAttribute("hidden");
   });
+  root.addEventListener("click", onClick);
 
   root.addEventListener("change", (e) => {
     if (e.target.matches("[data-file-input]") && e.target.files?.length) {
@@ -833,15 +868,6 @@ function bind() {
     if (e.dataTransfer?.files?.length) handleFiles(e.dataTransfer.files);
   });
 }
-
-// Registered once at module load (not inside bind(), which reruns on every
-// mountWorkspace() call) so it never accumulates duplicate listeners across
-// repeated "new assessment" cycles. Closes the criticality listbox on a click
-// anywhere outside it, including outside the workspace root entirely.
-document.addEventListener("click", (e) => {
-  if (!root || e.target.closest(".crit-select")) return;
-  closeCritDropdown();
-});
 
 export function mountWorkspace(container, opts = {}) {
   root = container;
