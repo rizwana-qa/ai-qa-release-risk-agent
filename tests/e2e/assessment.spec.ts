@@ -178,6 +178,10 @@ test("print / PDF layer: brand band, decision panel fits, status bar, no orphan 
       kpiIcons: document.querySelectorAll(".pr-kpi__value svg").length,
       execBar: shown(".pr-dist"),
       decision: (document.querySelector(".pr-hero__value") as HTMLElement).textContent,
+      decisionPt: parseFloat(getComputedStyle(document.querySelector(".pr-hero__value")!).fontSize) * 0.75,
+      bodyPt: parseFloat(getComputedStyle(document.querySelector(".pr-hero__reason p")!).fontSize) * 0.75,
+      mainShare: panel.width / rect(".pr-hero").width,
+      heroMm: rect(".pr-hero").height * 25.4 / 96,
     };
   });
   expect(m.printOnly).toBe(true);
@@ -188,10 +192,68 @@ test("print / PDF layer: brand band, decision panel fits, status bar, no orphan 
   expect(m.kpiIcons).toBe(3);
   expect(m.execBar).toBe(true);
   expect(m.decision).toBe("CONDITIONAL");
+  // Compact decision + summary panel: 16-19pt decision, 9.5-11pt body, ~40/60 columns, content-driven height.
+  expect(m.decisionPt).toBeGreaterThanOrEqual(16);
+  expect(m.decisionPt).toBeLessThanOrEqual(19);
+  expect(m.bodyPt).toBeGreaterThanOrEqual(9.5);
+  expect(m.bodyPt).toBeLessThanOrEqual(11);
+  expect(m.mainShare).toBeGreaterThan(0.37);
+  expect(m.mainShare).toBeLessThan(0.43);
+  expect(m.heroMm).toBeLessThan(32);
 
   // Actual PDF: one physical page per section for this report (no footer-only or blank pages).
   const pdf = await page.pdf({ format: "A4", preferCSSPageSize: true, printBackground: false });
   const pages = (pdf.toString("latin1").match(/\/Type\s*\/Page(?![s\w])/g) || []).length;
   expect(pages).toBe(4);
+});
+
+test("decision + executive summary panel is compact on desktop and stacks without overflow at 320px", async ({ page }) => {
+  await page.goto("/");
+  await page.locator('.ws [data-act="load-example"]').click();
+  await continueToEvidence(page);
+  await page.locator('[data-act="analyze"]').click();
+  await expect(page.locator(".tabs")).toBeVisible({ timeout: 40_000 });
+  await goToDecision(page);
+
+  const measure = () => page.evaluate(() => {
+    const px = (sel: string, p: string) => parseFloat(getComputedStyle(document.querySelector(sel)!)[p as any]);
+    const r = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+    const d = document.documentElement;
+    return {
+      value: px(".decision-box__value", "fontSize"), ring: r(".decision-box__ring").width,
+      pad: px(".decision-box", "paddingTop"), ratPad: px(".rationale", "paddingTop"),
+      h3: px(".rationale h3", "fontSize"), lead: px(".rationale__lead", "fontSize"),
+      height: r(".exec-grid").height, share: r(".decision-box").width / r(".exec-grid").width,
+      stacked: r(".rationale").top >= r(".decision-box").bottom - 1,
+      overflow: d.scrollWidth > d.clientWidth + 1,
+      clipped: (document.querySelector(".decision-box__value") as HTMLElement).scrollWidth > (document.querySelector(".decision-box__value") as HTMLElement).clientWidth + 1,
+      label: document.querySelector(".decision-box__value")!.textContent,
+    };
+  });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const desk = await measure();
+  expect(desk.label).toBe("CONDITIONAL");
+  expect(desk.value).toBeGreaterThanOrEqual(22);
+  expect(desk.value).toBeLessThanOrEqual(24);
+  expect(desk.ring).toBeGreaterThanOrEqual(28);
+  expect(desk.ring).toBeLessThanOrEqual(32);
+  expect(desk.pad).toBeLessThanOrEqual(20);
+  expect(desk.ratPad).toBeLessThanOrEqual(20);
+  expect(desk.h3).toBeGreaterThanOrEqual(12);
+  expect(desk.h3).toBeLessThanOrEqual(13);
+  expect(desk.lead).toBeGreaterThanOrEqual(12);
+  expect(desk.lead).toBeLessThanOrEqual(14);
+  expect(desk.share).toBeGreaterThan(0.38);
+  expect(desk.share).toBeLessThan(0.42);
+  expect(desk.stacked).toBe(false); // two columns on desktop
+  expect(desk.height).toBeLessThan(210);
+
+  await page.setViewportSize({ width: 320, height: 700 });
+  const phone = await measure();
+  expect(phone.stacked).toBe(true); // decision first, summary second
+  expect(phone.overflow).toBe(false);
+  expect(phone.clipped).toBe(false);
+  expect(phone.pad).toBeLessThanOrEqual(16);
 });
 
