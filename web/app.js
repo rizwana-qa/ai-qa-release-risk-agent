@@ -24,6 +24,7 @@ const view = document.getElementById("view");
 const steps = document.getElementById("topbar-steps");
 const compact = document.getElementById("wf-compact");
 const headDecision = document.getElementById("hdr-decision");
+const crumb = document.getElementById("hdr-crumb");
 const menuBtn = document.getElementById("menu-btn");
 const menuList = document.getElementById("menu-list");
 const relaunchBtn = document.getElementById("relaunch-btn");
@@ -113,6 +114,7 @@ function paintSteps() {
 
   // Mobile: "Step N of 5: Label" + segmented progress + an inline stage list.
   const curIdx = STEP_ORDER.indexOf(activeKey) + 1;
+  if (crumb) crumb.textContent = `Stage ${curIdx} of ${STEP_ORDER.length} · ${STEP_LABEL[activeKey]}`;
   compact.innerHTML = `
     <div class="wfc__row">
       <div class="wfc__label">Step ${curIdx} of ${STEP_ORDER.length} <span>· ${STEP_LABEL[activeKey]}</span></div>
@@ -616,6 +618,8 @@ async function showGates() {
   view.hidden = true;
   gatesView.hidden = false;
   document.body.dataset.page = "gates";
+  document.getElementById("nav-gates")?.setAttribute("aria-current", "page");
+  crumb.textContent = "Reference · Quality Gates";
   if (!gatesDoc) {
     gatesView.innerHTML = '<p class="muted" role="status">Loading quality gates…</p>';
     try { gatesDoc = await fetchJson("/api/quality-gates"); }
@@ -631,6 +635,7 @@ function hideGates() {
   gatesView.hidden = true;
   view.hidden = false;
   delete document.body.dataset.page;
+  document.getElementById("nav-gates")?.removeAttribute("aria-current");
   paintSteps();
 }
 
@@ -638,7 +643,7 @@ function syncRoute() { if (location.hash === GATES_HASH) showGates(); else hideG
 window.addEventListener("hashchange", syncRoute);
 
 // Choosing anything in the workflow leaves the reference page first.
-document.addEventListener("click", (e) => {
+document.getElementById("app").addEventListener("click", (e) => {
   if (!gatesView.hidden && e.target.closest("[data-step], #menu-list [data-act]")) {
     history.replaceState(null, "", location.pathname + location.search);
     hideGates();

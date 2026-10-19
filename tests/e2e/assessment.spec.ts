@@ -199,7 +199,7 @@ test("print / PDF layer: brand band, decision panel fits, status bar, no orphan 
   expect(m.bodyPt).toBeLessThanOrEqual(11);
   expect(m.mainShare).toBeGreaterThan(0.37);
   expect(m.mainShare).toBeLessThan(0.43);
-  expect(m.heroMm).toBeLessThan(32);
+  expect(m.heroMm).toBeLessThan(42); // decision word + reason + the change description
 
   // Actual PDF: one physical page per section for this report (no footer-only or blank pages).
   const pdf = await page.pdf({ format: "A4", preferCSSPageSize: true, printBackground: false });
@@ -222,7 +222,7 @@ test("decision + executive summary panel is compact on desktop and stacks withou
     return {
       value: px(".decision-box__value", "fontSize"), ring: r(".decision-box__ring").width,
       pad: px(".decision-box", "paddingTop"), ratPad: px(".rationale", "paddingTop"),
-      h3: px(".rationale h3", "fontSize"), lead: px(".rationale__lead", "fontSize"),
+      h3: px(".rationale h2", "fontSize"), lead: px(".rationale__lead", "fontSize"),
       height: r(".exec-grid").height, share: r(".decision-box").width / r(".exec-grid").width,
       stacked: r(".rationale").top >= r(".decision-box").bottom - 1,
       overflow: d.scrollWidth > d.clientWidth + 1,
@@ -255,5 +255,35 @@ test("decision + executive summary panel is compact on desktop and stacks withou
   expect(phone.overflow).toBe(false);
   expect(phone.clipped).toBe(false);
   expect(phone.pad).toBeLessThanOrEqual(16);
+});
+
+test("report states its evidence and provenance; Review tabs stay reachable at tablet width", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await page.goto("/");
+  await page.locator('.ws [data-act="load-example"]').click();
+  await continueToEvidence(page);
+  await page.locator('[data-act="analyze"]').click();
+  await expect(page.locator(".tabs")).toBeVisible({ timeout: 40_000 });
+
+  // Every Review tab is on screen (none scrolled out of reach) and keeps its place in the tab order.
+  const reach = await page.evaluate(() => [...document.querySelectorAll("[data-tab]")].map((t) => {
+    const r = t.getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth && r.width > 0;
+  }));
+  expect(reach).toHaveLength(6);
+  expect(reach.every(Boolean)).toBe(true);
+
+  // The evidence line restates the supplied inputs (the worked example: 4 criteria, 5 tests, 1 defect, no documents).
+  await expect(page.locator(".report__evidence")).toHaveText("Evidence analyzed: 4 acceptance criteria · 5 test cases · 1 known defect · 0 supporting documents");
+
+  await goToDecision(page);
+  // Provenance: supplied evidence vs advisory content are labelled; the gate's block is labelled deterministic.
+  await expect(page.locator("section:has(#x-h) .lane--ev")).toHaveText("Supplied evidence");
+  await expect(page.locator("section:has(#d-h) .lane--ev")).toHaveText("Supplied evidence");
+  await expect(page.locator("section:has(#a-h) .lane--ai")).toHaveText("Advisory");
+  await expect(page.locator(".card--gate .lane--gate")).toHaveText("Deterministic gate");
+
+  // Heading hierarchy: one h1, and the executive-summary heading is an h2 (no skipped level).
+  expect(await page.locator("#view h1:visible").count()).toBe(1);
+  await expect(page.locator(".rationale h2")).toContainText("Why This Release Is Conditional");
 });
 

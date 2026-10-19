@@ -1,7 +1,7 @@
 /**
  * Minimum-evidence policy (GATE-6) in the browser: the form messages, the
- * CONDITIONAL screen and PDF layer for an empty submission, and a GO with and
- * without a coverage warning.
+ * CONDITIONAL screen and PDF layer for an empty submission, a GO with and
+ * without a coverage warning, and the Quality Gates page.
  */
 
 import { test, expect, type Page } from "@playwright/test";
@@ -86,7 +86,7 @@ test("one passing mapped test satisfies the minimum; partial coverage shows a wa
   await addTest(page, "passed", ["AC1"]);
   await analyseToDecision(page);
   await expect(page.locator(".decision-box__value")).toHaveText("GO");
-  await expect(page.locator(".rationale :is(h2, h3)")).toHaveText(/^Release decision rationale$/i);
+  await expect(page.locator(".rationale h2")).toHaveText("Release Decision Rationale");
   await expect(page.locator(".rationale")).toContainText("Coverage is below the illustrative threshold.");
   await expect(page.locator(".rationale")).toContainText("does not show that every acceptance criterion has been verified");
   const printText = await page.evaluate(() => document.querySelector(".print-report")!.textContent || "");
@@ -101,4 +101,16 @@ test("full coverage GO has the plain note and no coverage warning", async ({ pag
   await expect(page.locator(".decision-box__value")).toHaveText("GO");
   await expect(page.locator(".rationale")).not.toContainText("Coverage is below the illustrative threshold");
   await expect(page.locator(".rationale .rationale__note")).toContainText("GO means no gate blocked this release");
+});
+
+test("Quality Gates page documents GATE-6 between GATE-4 and GATE-5", async ({ page, request }) => {
+  const doc = await (await request.get("/api/quality-gates")).json();
+  expect(doc.evaluationOrder).toEqual(["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-6", "GATE-5"]);
+  await page.goto("/#/quality-gates");
+  const ids = await page.locator(".qg-gate .qg-id").allInnerTexts();
+  expect(ids).toEqual(["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-6", "GATE-5", "FAIL_SAFE"]);
+  const card = page.locator("#qg-GATE-6").locator("xpath=ancestor::article");
+  await expect(card).toContainText("Minimum Evidence");
+  await expect(card).toContainText("CONDITIONAL");
+  await expect(page.locator("#gates-view")).toContainText("GATE-6 is a floor, not proof");
 });

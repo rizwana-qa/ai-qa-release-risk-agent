@@ -179,6 +179,14 @@ export function reportView(result, { stage, tab = "risk" } = {}) {
   const description = ctx.releaseScope || ctx.userStory || "";
   const stageNo = stage === "review" ? 4 : 5;
   const stageTitle = headingCase(stage === "review" ? "Review findings & risk signals" : "Release decision");
+  // What was analysed: plain counts of the evidence this report was built from (never estimated).
+  const plural = (c, one, many) => `${c} ${c === 1 ? one : many}`;
+  const evidenceCounts = [
+    plural(cov ? cov.totalCriteria : (ctx.acceptanceCriteria || []).length, "acceptance criterion", "acceptance criteria"),
+    plural(cov ? cov.totalTests : (ctx.testCases || []).length, "test case", "test cases"),
+    plural((ctx.defects || []).length, "known defect", "known defects"),
+    plural((ctx.supportingDocuments || []).length, "supporting document", "supporting documents"),
+  ].join(" · ");
 
   const head = `<header class="report__head">
       <div class="report__ident">
@@ -189,6 +197,7 @@ export function reportView(result, { stage, tab = "risk" } = {}) {
           ${ctx.criticality ? badge(`${upper(ctx.criticality)} criticality`, "b-info") : ""}
           ${badge(modeLabel(mode), "b-out")}
         </div>
+        <p class="report__evidence"><b>Evidence analyzed:</b> ${esc(evidenceCounts)}</p>
         ${description && stage !== "review" ? `<p class="report__subtitle">${esc(clip(String(description), 200))}</p>` : ""}
       </div>
       <div class="report__actions">
@@ -226,9 +235,12 @@ function decisionStage(result, report, summary, cov, ctx, meta, mode, decision) 
   return [
     decisionHero(report, summary, cov, decision),
     kpiRow(report, summary, cov),
-    `<div class="cols2">${executionCard(cov)}${openDefectsCard(ctx)}</div>`,
+    metricStrip(cov, ctx),
+    `<div class="cols2">${executionCard(cov)}${riskDistributionCard(report, ctx)}</div>`,
+    `<div class="cols2">${openDefectsCard(ctx)}${evidenceCard(report, cov, ctx)}</div>`,
     readinessCard(report, summary),
     findingsCard(report, ctx),
+    aiAssessmentCallout(report),
     `<div class="cols2">${insightsCard(report, summary, cov)}${recommendationsCard(report)}</div>`,
     decisionTraceAccordion(report, ctx, cov),
     technicalAccordion(result, report, meta, mode),
@@ -305,6 +317,9 @@ function rationalePanel(report, decision, summary) {
     : (report.aiQaExplanation
       ? "The deterministic gate reported no blocking reasons. AI narrative context is shown below."
       : "The deterministic gate reported no blocking reasons for this release.");
+  const leadText = !reasons.length && !["GO", "NO_GO", "CONDITIONAL"].includes(decision)
+    ? "The pipeline did not return a valid release decision."
+    : lead;
 
   // Rule identifiers the gate itself cited (GATE-n / SEC-n / COV-n), de-duped.
   const ruleIds = [...new Set([
@@ -316,8 +331,8 @@ function rationalePanel(report, decision, summary) {
   const gateStep = [...trace].reverse().find((t) => /gate/.test(t.step || ""));
 
   return `<div class="rationale">
-    <div class="rationale__head"><span class="ico">${ICONS.scale}</span><div><span class="eyebrow" style="margin:0">Executive Summary</span><h3>${esc(headingCase(heading))}</h3></div></div>
-    <p class="rationale__lead">${esc(lead)}</p>
+    <div class="rationale__head"><span class="ico">${ICONS.scale}</span><div><span class="eyebrow" style="margin:0">Executive Summary</span><h2>${esc(headingCase(heading))}</h2></div></div>
+    <p class="rationale__lead">${esc(leadText)}</p>
     ${(() => {
       const note = goEvidenceNote(decision, summary);
       if (!note) return "";
@@ -376,7 +391,7 @@ function executionCard(cov) {
   ];
   const aria = seg.map(([l, n]) => `${n} ${l.toLowerCase()}`).join(", ");
   return `<section class="card" aria-labelledby="x-h">
-    <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="x-h">Test Execution Summary</h2>${badge(`${cov.totalTests} total`, "b-out")}</div>
+    <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="x-h">Test Execution Summary</h2>${badge(`${cov.totalTests} total`, "b-out")}<span class="lane lane--ev">Supplied evidence</span></div>
     <div class="card__body">
       <div class="dist" role="img" aria-label="Test status distribution: ${esc(aria)}">${seg.map(([, n, c]) => (n ? `<i style="flex:${n};background:${c}"></i>` : "")).join("")}</div>
       <div class="leg">${seg.map(([l, n, c]) => `<span class="sw" style="background:${c}"></span><span>${l}</span><b>${n}</b><span class="muted pct">${Math.round((n / total) * 100)}%</span>`).join("")}</div>
@@ -392,7 +407,7 @@ function openDefectsCard(ctx) {
   const by = (s) => open.filter((d) => d.severity === s).length;
   const hp = open.filter((d) => d.severity === "critical" || d.severity === "high");
   return `<section class="card" aria-labelledby="d-h">
-    <div class="card__head"><span class="ico">${ICONS.bug}</span><h2 id="d-h">Open Defects</h2>${badge(`${defects.length} total`, "b-out")}</div>
+    <div class="card__head"><span class="ico">${ICONS.bug}</span><h2 id="d-h">Open Defects</h2>${badge(`${defects.length} total`, "b-out")}<span class="lane lane--ev">Supplied evidence</span></div>
     <div class="card__body">
       <div class="bigrow">
         <div><div class="big" style="color:${open.length ? "var(--crit-ink)" : "var(--ok-ink)"}">${open.length}</div><span class="hint">open</span></div>
@@ -406,6 +421,100 @@ function openDefectsCard(ctx) {
             <span><b class="mono">${esc(d.label || d.id || "")}</b> · ${esc(displayArea(d.area))}${d.security ? ` ${badge("Security", "b-security")}` : ""}<br><span class="muted">${formatFreeText(d.description)}</span></span></li>`).join("")}</ul>`
         : `<p class="muted">No open critical or high severity defects were supplied.</p>`}
     </div>
+  </section>`;
+}
+
+/* ---- dashboard blocks: every figure below is counted from the report's own data ---- */
+
+const SEV_BUCKETS = [["critical", "Critical"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]];
+
+/** Counts of the risk-register rows by their own severity/priority label. */
+function severityCounts(report, ctx) {
+  const rows = registerRows(report, ctx);
+  const counts = SEV_BUCKETS.map(([key, label]) => ({ key, label, count: rows.filter((r) => String(r.level || "").toLowerCase() === key).length }));
+  const unrated = rows.length - counts.reduce((a, c) => a + c.count, 0);
+  if (unrated > 0) counts.push({ key: "unrated", label: "Unrated", count: unrated });
+  return { rows, counts, total: rows.length };
+}
+
+/** Donut: one arc per severity, in the same order and colours as the legend beside it. */
+function donutSvg(counts, total, cls = "donut") {
+  const R = 15.9155; // circumference = 100, so each dash length is a percentage
+  const used = counts.filter((c) => c.count > 0);
+  const gap = used.length > 1 ? 0.8 : 0;
+  let acc = 0;
+  const arcs = used.map((c) => {
+    const pct = (c.count / total) * 100;
+    const el = `<circle class="${cls}__seg ${cls}__seg--${c.key}" cx="21" cy="21" r="${R}" fill="none" stroke-width="6" stroke-dasharray="${(pct - gap).toFixed(2)} ${(100 - pct + gap).toFixed(2)}" stroke-dashoffset="${(25 - acc).toFixed(2)}"/>`;
+    acc += pct;
+    return el;
+  }).join("");
+  const label = `Risk signals by severity: ${used.map((c) => `${c.count} ${c.label.toLowerCase()}`).join(", ")} (${total} total)`;
+  return `<svg class="${cls}__svg" viewBox="0 0 42 42" role="img" aria-label="${esc(label)}"><circle class="${cls}__track" cx="21" cy="21" r="${R}" fill="none" stroke-width="6"/>${arcs}
+    <text class="${cls}__n" x="21" y="21.5" text-anchor="middle" dominant-baseline="central">${total}</text>
+    <text class="${cls}__t" x="21" y="27" text-anchor="middle">signals</text></svg>`;
+}
+
+function riskDistributionCard(report, ctx) {
+  const { counts, total } = severityCounts(report, ctx);
+  if (!total) {
+    return `<section class="card" aria-labelledby="rd-h"><div class="card__head"><span class="ico">${ICONS.gauge}</span><h2 id="rd-h">Risk Distribution</h2></div>
+      <div class="card__body"><p class="muted">No specific risk signals were identified from the submitted evidence.</p></div></section>`;
+  }
+  return `<section class="card" aria-labelledby="rd-h">
+    <div class="card__head"><span class="ico">${ICONS.gauge}</span><h2 id="rd-h">Risk Distribution</h2>${badge(`${total} signal${total === 1 ? "" : "s"}`, "b-out")}</div>
+    <div class="card__body"><div class="donut">
+      ${donutSvg(counts, total)}
+      <ul class="donut__legend" aria-label="Risk signals by severity">${counts.map((c) => `<li><span class="donut__sw donut__seg--${c.key}"></span><span>${esc(c.label)}</span><b>${c.count}</b></li>`).join("")}</ul>
+    </div>
+    <p class="hint mt-3">Counts the signals listed in the risk register (identified risks, regression priorities and supplied defects) by their own severity or priority label.</p></div>
+  </section>`;
+}
+
+/** Six headline counts: tests by status and defects. Test counts are the coverage statistics as returned. */
+function metricStrip(cov, ctx) {
+  const defects = Array.isArray(ctx.defects) ? ctx.defects : [];
+  const open = defects.filter((d) => d.status === "open");
+  const critOpen = open.filter((d) => d.severity === "critical");
+  const t = (v) => (cov ? v : "—");
+  const item = (label, value, tone, sub = "") => `<div class="kstat${tone ? ` kstat--${tone}` : ""}"><span class="kstat__l">${esc(label)}</span><b class="kstat__v">${esc(String(value))}</b>${sub ? `<span class="kstat__s">${esc(sub)}</span>` : ""}</div>`;
+  return `<section class="kstrip" aria-label="Test and defect metrics">
+    ${item("Total Tests", t(cov?.totalTests), "")}
+    ${item("Passed", t(cov?.passed), cov && cov.passed ? "ok" : "")}
+    ${item("Failed", t(cov?.failed), cov && cov.failed ? "crit" : "")}
+    ${item("Blocked", t(cov?.blocked), cov && cov.blocked ? "warn" : "")}
+    ${item("Total Defects", defects.length, "", `${open.length} open`)}
+    ${item("Critical Defects", critOpen.length, critOpen.length ? "crit" : "", "open")}
+  </section>`;
+}
+
+/** What the assessment rests on, restated from the supplied evidence and the gate's own statistics. */
+function evidenceCard(report, cov, ctx) {
+  const defects = Array.isArray(ctx.defects) ? ctx.defects : [];
+  const open = defects.filter((d) => d.status === "open");
+  const critOpen = open.filter((d) => d.severity === "critical").length;
+  const docs = (ctx.supportingDocuments || []).length;
+  const gaps = (report.missingScenarios || []).length;
+  const uncovered = cov?.uncoveredCritical?.length ?? 0;
+  const block = (icon, title, text) => `<div class="evb"><span class="evb__ic">${icon}</span><div><b>${esc(title)}</b><span>${esc(text)}</span></div></div>`;
+  return `<section class="card" aria-labelledby="ev-h">
+    <div class="card__head"><span class="ico">${ICONS.clipboard}</span><h2 id="ev-h">Supporting Evidence</h2></div>
+    <div class="card__body"><div class="evgrid">
+      ${block(ICONS.list, "Test results", cov ? `${cov.failed} failed, ${cov.blocked} blocked of ${cov.totalTests} test case${cov.totalTests === 1 ? "" : "s"}` : "No test statistics were returned")}
+      ${block(ICONS.bug, "Defects", `${defects.length} total, ${open.length} open, ${critOpen} critical open`)}
+      ${block(ICONS.shield, "Acceptance-criteria coverage", cov ? `${cov.coveredCriteria} of ${cov.totalCriteria} criteria have a passing test (${cov.coveragePercent}%)` : "No coverage statistics were returned")}
+      ${block(ICONS.alert, "Evidence gaps", `${gaps} missing scenario${gaps === 1 ? "" : "s"}, ${uncovered} uncovered critical criteri${uncovered === 1 ? "on" : "a"}`)}
+      ${block(ICONS.file, "Supporting documents", `${docs} attached`)}
+    </div></div>
+  </section>`;
+}
+
+/** The AI's own narrative, labelled advisory and kept apart from the gate's decision. */
+function aiAssessmentCallout(report) {
+  return `<section class="callout callout--ai" aria-labelledby="ai-h">
+    <div class="callout__head"><span class="ico">${ICONS.sparkle}</span><h2 id="ai-h">AI Assessment</h2><span class="lane lane--ai">Advisory</span></div>
+    <p>${report.aiQaExplanation ? formatFreeText(report.aiQaExplanation) : "No explanation was produced."}</p>
+    <p class="hint">AI analysis explains the risk; it does not override the deterministic gate's decision.</p>
   </section>`;
 }
 
@@ -482,9 +591,9 @@ function riskRegister(report, ctx) {
 function findingsCard(report, ctx) {
   const rows = registerRows(report, ctx);
   const cited = [...rows.filter((r) => r.flagged && r.kind === "Defect"), ...rows.filter((r) => r.flagged && r.kind !== "Defect")];
-  const show = (cited.length ? cited : rows).slice(0, 3);
+  const show = (cited.length ? [...cited, ...rows.filter((r) => !cited.includes(r))] : rows).slice(0, 5);
   return `<section class="card" aria-labelledby="f-h">
-    <div class="card__head"><span class="ico">${ICONS.gauge}</span><h2 id="f-h">Important Findings</h2>
+    <div class="card__head"><span class="ico">${ICONS.gauge}</span><h2 id="f-h">Risk Register</h2>${badge(`Top ${show.length} of ${rows.length}`, "b-out")}
       <span class="card__counts"><button class="linkbtn" type="button" data-nav="review">All ${rows.length} in Review</button></span></div>
     <div class="card__body card__body--flush">${registerTable(show)}</div>
   </section>`;
@@ -535,7 +644,7 @@ function recommendationsCard(report) {
     ? actions.map((a) => `<li>${ICONS.check}<span>${esc(a)}</span></li>`).join("")
     : `<li>${ICONS.check}<span>No follow-up actions were derived from the submitted evidence.</span></li>`;
   return `<section class="card card--actions" aria-labelledby="a-h">
-    <div class="card__head"><span class="ico">${ICONS.target}</span><h2 id="a-h">Recommended Next Actions</h2></div>
+    <div class="card__head"><span class="ico">${ICONS.target}</span><h2 id="a-h">Recommended Next Actions</h2><span class="lane lane--ai">Advisory</span></div>
     <div class="card__body">
       <ul class="list list--act">${items}</ul>
     </div>
@@ -904,7 +1013,9 @@ function prSeverity(level) {
 function printReport(result, report, summary, cov, ctx, meta, decision) {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
-  const genStamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const tzMin = -now.getTimezoneOffset();
+  const tz = `UTC${tzMin >= 0 ? "+" : "-"}${pad(Math.floor(Math.abs(tzMin) / 60))}:${pad(Math.abs(tzMin) % 60)}`;
+  const genStamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())} ${tz}`;
   const fileStamp = `${now.getFullYear()} ${pad(now.getMonth() + 1)} ${pad(now.getDate())}`;
 
   const assessmentId = String(ctx.requirementId || report.dataProvenance?.requirementId || report.scenario || "—");
@@ -913,6 +1024,11 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
   const reasons = Array.isArray(report.reasons) ? report.reasons : [];
   const decClass = decisionClass(decision);
   const decLabel = decisionLabel(decision);
+  const validDecision = ["GO", "NO_GO", "CONDITIONAL"].includes(decision);
+  // Same state-aware wording the web decision screen uses for the gate's reasons.
+  const reasonsHeading = decision === "GO" ? "Gate checks" : decision === "CONDITIONAL" ? "Conditions &amp; unresolved items" : decision === "NO_GO" ? "Top release blockers" : "Gate findings";
+  const reasonsTone = decision === "GO" ? "pr-list--ok" : decision === "CONDITIONAL" ? "pr-list--warn" : decision === "NO_GO" ? "pr-list--crit" : "";
+  const noReasonsText = validDecision ? "The deterministic gate reported no blocking reasons." : "No valid release decision was returned, so no gate findings are available.";
   const decIcon = decision === "GO" ? ICONS.check
     : decision === "NO_GO" ? ICONS.x
     : decision === "CONDITIONAL" ? ICONS.alert : ICONS.help;
@@ -927,6 +1043,23 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
   const actions = recommendedActions(report);
 
   /* ---- page 1: executive release summary ---- */
+  const sevInfo = severityCounts(report, ctx);
+  const pdfDefects = Array.isArray(ctx.defects) ? ctx.defects : [];
+  const pdfOpen = pdfDefects.filter((d) => d.status === "open");
+  const pdfCritOpen = pdfOpen.filter((d) => d.severity === "critical").length;
+  const mstat = (label, value, tone, sub = "") => `<div class="pr-ms${tone ? ` pr-ms--${tone}` : ""}"><span class="pr-ms__l">${esc(label)}</span><b class="pr-ms__v">${esc(String(value))}</b>${sub ? `<span class="pr-ms__s">${esc(sub)}</span>` : ""}</div>`;
+  const metricsStrip = `<div class="pr-mstrip">
+      ${mstat("Total Tests", cov ? cov.totalTests : "—", "")}
+      ${mstat("Passed", cov ? cov.passed : "—", cov && cov.passed ? "ok" : "")}
+      ${mstat("Failed", cov ? cov.failed : "—", cov && cov.failed ? "crit" : "")}
+      ${mstat("Blocked", cov ? cov.blocked : "—", cov && cov.blocked ? "warn" : "")}
+      ${mstat("Total Defects", pdfDefects.length, "", `${pdfOpen.length} open`)}
+      ${mstat("Critical Defects", pdfCritOpen, pdfCritOpen ? "crit" : "", "open")}
+    </div>`;
+  const riskSummary = sevInfo.total
+    ? `<div class="pr-donut">${donutSvg(sevInfo.counts, sevInfo.total, "pr-donut")}
+        <ul class="pr-donut__legend">${sevInfo.counts.map((c) => `<li><i class="pr-donut__seg--${c.key}"></i><span>${esc(c.label)}</span><b>${c.count}</b></li>`).join("")}</ul></div>`
+    : `<p class="pr-muted">No specific risk signals were identified from the submitted evidence.</p>`;
   const page1 = `
     <div class="pr-hero pr-hero--${decClass}">
       <div class="pr-hero__main">
@@ -936,11 +1069,12 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
       </div>
       <div class="pr-hero__reason">
         <span class="pr-eyebrow">Decision Reason</span>
-        <p>${esc(reasons[0] || "The deterministic QA gate reported no blocking reasons for this release.")}</p>
+        <p>${esc(reasons[0] || (validDecision ? "The deterministic QA gate reported no blocking reasons for this release." : "The pipeline did not return a valid release decision."))}</p>
         ${(() => {
           const note = goEvidenceNote(decision, summary);
           return note ? `<p class="pr-notice${note.warn ? " pr-notice--warn" : ""}">${note.warn ? `<b>${esc(note.title)}</b> ` : ""}${esc(note.text)}</p>` : "";
         })()}
+        <p class="pr-change"><b>Change Under Assessment</b>${esc(report.changeSummary || ctx.releaseScope || "Not provided.")}</p>
       </div>
     </div>
 
@@ -951,18 +1085,27 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
         sec === "failed" ? (summary.securityReasons?.length || 0) + " deterministic check(s) failed" : sec === "passed" ? "Deterministic checks passed" : "No security scan supplied")}
     </div>
 
-    <h2 class="pr-h2">Top Release Blockers</h2>
+    <h2 class="pr-h2">Key Metrics</h2>
+    ${metricsStrip}
+
+    <div class="pr-pair">
+      <section class="pr-box"><h3 class="pr-h3">Risk Summary</h3>${riskSummary}
+        <p class="pr-note">Risk-register signals by severity or priority label.</p></section>
+      <section class="pr-box pr-box--ai"><h3 class="pr-h3">AI Findings <span class="pr-tag">Advisory</span></h3>
+        <p class="pr-para">${esc(report.aiQaExplanation || "No explanation was produced.")}</p>
+        <p class="pr-note">AI analysis explains the risk; it does not override the deterministic gate's decision.</p></section>
+    </div>
+
+    <h2 class="pr-h2">${headingCase(reasonsHeading)}</h2>
     ${reasons.length
-      ? `<ol class="pr-list pr-list--crit">${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ol>`
-      : `<p class="pr-muted">The deterministic gate reported no blocking reasons.</p>`}
+      ? `<ol class="pr-list ${reasonsTone}">${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ol>`
+      : `<p class="pr-muted">${noReasonsText}</p>`}
 
     <h2 class="pr-h2">Recommended Next Actions</h2>
     ${actions.length
       ? `<ol class="pr-list pr-list--act">${actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ol>`
       : `<p class="pr-muted">No follow-up actions were derived from the submitted evidence.</p>`}
 
-    <h2 class="pr-h2">Change Under Assessment</h2>
-    <p class="pr-para">${esc(report.changeSummary || ctx.releaseScope || "Not provided.")}</p>
   `;
 
   /* ---- page 2: risk & defect register ---- */
@@ -1013,6 +1156,15 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
   const execSeg = cov ? [["Passing", cov.passed, "ok"], ["Failing", cov.failed, "crit"], ["Blocked / other", execOther, "neutral"]] : [];
   const execBar = cov ? `<div class="pr-dist" role="img" aria-label="${esc(execSeg.map(([l, c]) => `${c} ${l.toLowerCase()}`).join(", "))}">${execSeg.map(([, c, t]) => (c ? `<i class="pr-dist--${t}" style="flex:${c}"></i>` : "")).join("")}</div>
     <div class="pr-leg">${execSeg.map(([l, c, t]) => `<span><i class="pr-dist--${t}"></i>${esc(l)} <b>${c}</b></span>`).join("")}</div>` : "";
+  const defs = Array.isArray(ctx.defects) ? ctx.defects : [];
+  const openDefs = defs.filter((d) => d.status === "open");
+  const sevSeg = [["Critical", "critical", "c"], ["High", "high", "h"], ["Medium", "medium", "m"], ["Low", "low", "l"]]
+    .map(([label, key, cls]) => [label, openDefs.filter((d) => d.severity === key).length, cls]);
+  const defectBar = defs.length
+    ? `<div class="pr-dist" role="img" aria-label="${esc(sevSeg.map(([l, c]) => `${c} ${l.toLowerCase()}`).join(", "))} open defects">${sevSeg.map(([, c, k]) => (c ? `<i class="pr-dist--${k}" style="flex:${c}"></i>` : "")).join("")}</div>
+      <div class="pr-leg">${sevSeg.map(([l, c, k]) => `<span><i class="pr-dist--${k}"></i>${l} <b>${c}</b></span>`).join("")}</div>
+      <p class="pr-para pr-muted">${openDefs.length} open of ${defs.length} supplied defect${defs.length === 1 ? "" : "s"}${openDefs.some((d) => d.security) ? `; ${openDefs.filter((d) => d.security).length} security-flagged` : ""}.</p>`
+    : `<p class="pr-muted">No known defects were supplied.</p>`;
   const page3 = `
     <h3 class="pr-h3">Test Execution Summary</h3>
     ${execBar}
@@ -1029,12 +1181,14 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
       </tbody>
     </table>
 
+    <h3 class="pr-h3">Open Defects By Severity</h3>
+    ${defectBar}
     <h3 class="pr-h3">Uncovered Critical Criteria</h3>
     ${uncovered.length
       ? `<p class="pr-para pr-mono">${uncovered.map(esc).join(", ")}</p>`
       : `<p class="pr-muted">None — every critical acceptance criterion has an active test.</p>`}
 
-    <h3 class="pr-h3">Failed Deterministic Rules</h3>
+    <h3 class="pr-h3">${headingCase(decision === "GO" ? "Applied deterministic rules" : "Failed deterministic rules")}</h3>
     ${failedRules.length
       ? `<p class="pr-para pr-mono">${failedRules.map(esc).join(", ")}</p>`
       : `<p class="pr-muted">No deterministic rule was recorded as failed.</p>`}
@@ -1060,7 +1214,9 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
   const trace = report.pipelineTrace || [];
   const page4 = `
     <h3 class="pr-h3">Pipeline Stages</h3>
-    <ol class="pr-list">${(meta.pipelineStages || []).map((s) => `<li>${esc(s)}</li>`).join("") || `<li class="pr-muted">Not recorded.</li>`}</ol>
+    ${(meta.pipelineStages || []).length
+      ? `<ol class="pr-steps">${meta.pipelineStages.map((s, i) => `<li><b>${String(i + 1).padStart(2, "0")}</b><span>${esc(s)}</span></li>`).join("")}</ol>`
+      : `<p class="pr-muted">Not recorded.</p>`}
 
     <h3 class="pr-h3">Gate Evaluation Order</h3>
     <p class="pr-para pr-mono">${(meta.evaluationOrder || []).map(esc).join(" → ") || "Not recorded."}</p>
@@ -1099,7 +1255,7 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
 
   const runHead = (title) => `<div class="pr-runhead">
     <span class="pr-runhead__brand"><span class="pr-mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg></span>AI QA Release Risk &amp; Test Strategy — Release Risk Report</span>
-    <span class="pr-runhead__id pr-mono">${esc(assessmentId)}</span>
+    <span class="pr-runhead__right"><span class="pr-conf">Confidential</span><span class="pr-runhead__id pr-mono">${esc(assessmentId)}</span></span>
   </div>`;
   const runFoot = (i) => `<div class="pr-runfoot">
     <span>${esc(shortName)}</span>

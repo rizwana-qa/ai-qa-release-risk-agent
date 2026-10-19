@@ -678,7 +678,7 @@ function evidenceStageHtml() {
           <span class="dropzone__icon">${ICONS.upload}</span>
           <p class="dropzone__title"><strong>Drop files here</strong> or <button class="linkbtn" type="button" data-act="pick-file">choose files</button></p>
           <p class="field__hint">${TEXT_EXT.join(", ")} are parsed into rows or notes. ${REFERENCE_EXT.join(", ")} are attached as references only (no document parsing). Executable and script files are rejected.</p>
-          <input type="file" data-file-input multiple accept=".json,.csv,.txt,.pdf,.docx,.xlsx" hidden />
+          <input type="file" data-file-input multiple accept=".json,.csv,.txt,.pdf,.docx,.xlsx" aria-label="Choose evidence files" hidden />
         </div>
         ${state.uploadError ? `<div class="validation" role="alert" style="margin:12px 0 0">${esc(state.uploadError)}</div>` : ""}
         ${docChips()}

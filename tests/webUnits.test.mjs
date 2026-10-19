@@ -236,6 +236,79 @@ describe("web/components.js — staged report screens", () => {
   });
 });
 
+describe("web/components.js — decision dashboard blocks", () => {
+  const decision = (over) => reportView(sampleResult(over), { stage: "decision" });
+  const digits = (html, re) => Number((html.match(re) || [])[1]);
+
+  it("renders the metric strip with the coverage statistics as returned", () => {
+    const html = decision();
+    assert.match(html, /class="kstrip"/);
+    assert.equal(digits(html, /kstat__l">Total Tests<\/span><b class="kstat__v">(\d+)</), 1);
+    assert.equal(digits(html, /kstat__l">Passed<\/span><b class="kstat__v">(\d+)</), 1);
+  });
+
+  it("shows an em dash, not zero, when coverage statistics are missing", () => {
+    const html = decision({ coverageStats: null });
+    assert.match(html, /kstat__l">Total Tests<\/span><b class="kstat__v">—</);
+  });
+
+  it("donut total equals the sum of the legend counts and the register rows", () => {
+    const html = decision({ report: { regressionPriorities: [{ area: "a", priority: "high", rationale: "r" }, { area: "b", priority: "low", rationale: "r" }] } });
+    const legend = [...html.matchAll(/donut__sw[^>]*><\/span><span>[^<]+<\/span><b>(\d+)<\/b>/g)].map((m) => Number(m[1]));
+    const total = legend.reduce((a, b) => a + b, 0);
+    assert.ok(total >= 3);
+    assert.match(html, new RegExp(`class="donut__n"[^>]*>${total}<`));
+    assert.match(html, new RegExp(`${total} signals`));
+  });
+
+  it("omits the donut and says so when there are no risk signals", () => {
+    const html = decision({ report: { identifiedRisks: [], regressionPriorities: [], defectReview: [] } });
+    assert.match(html, /No specific risk signals were identified/);
+    assert.doesNotMatch(html, /class="donut__svg"/);
+  });
+
+  it("labels the AI assessment advisory and never presents it as the decision", () => {
+    const html = decision();
+    assert.match(html, /callout--ai/);
+    assert.match(html, /lane lane--ai">Advisory</);
+  });
+
+  it("print page 1 carries the metrics strip, risk summary and change description", () => {
+    const html = decision();
+    assert.match(html, /class="pr-mstrip"/);
+    assert.match(html, /class="pr-donut__svg"/);
+    assert.match(html, /Change Under Assessment/);
+  });
+});
+
+describe("web/components.js — evidence line and provenance labels", () => {
+  it("restates the evidence counts from the report's own data", () => {
+    const html = reportView(sampleResult(), { stage: "decision" });
+    assert.match(html, /Evidence analyzed:<\/b> 1 acceptance criterion · 1 test case · 0 known defects · 0 supporting documents/);
+  });
+
+  it("pluralises and follows the data, not a fixed sample", () => {
+    const r = sampleResult();
+    r.coverageStats = { ...r.coverageStats, totalCriteria: 8, totalTests: 11 };
+    r.context = { ...r.context, defects: [{ id: "D1", severity: "low", status: "open", area: "x", description: "d" }, { id: "D2", severity: "low", status: "closed", area: "x", description: "d" }], supportingDocuments: [{ name: "a.pdf" }] };
+    const html = reportView(r, { stage: "review" });
+    assert.match(html, /8 acceptance criteria · 11 test cases · 2 known defects · 1 supporting document</);
+  });
+
+  it("labels supplied evidence, advisory content and the deterministic gate separately", () => {
+    const html = reportView(sampleResult(), { stage: "decision" });
+    assert.equal((html.match(/lane lane--ev">Supplied evidence</g) || []).length, 2);
+    assert.match(html, /lane lane--ai">Advisory</);
+    assert.match(html, /lane lane--gate">Deterministic gate</);
+  });
+
+  it("executive summary heading is an h2 under the h1 (no skipped heading level)", () => {
+    const html = reportView(sampleResult(), { stage: "decision" });
+    assert.match(html, /<h2>Why This Release Is Conditional<\/h2>/);
+    assert.doesNotMatch(html, /<h3>Why This Release/);
+  });
+});
+
 describe("web/components.js — print / PDF layer markup", () => {
   const printOf = (html) => html.slice(html.indexOf('class="print-report"'));
 
@@ -274,72 +347,68 @@ describe("web/components.js — print / PDF layer markup", () => {
   });
 });
 
-describe("web/components.js — minimum-evidence wording (GATE-6) and GO notices", () => {
-  const gate6 = "GATE-6: no passing test is mapped to any acceptance criterion; additional verification and review are required before this release can be GO.";
+describe("web/components.js — print layer wording never softens a decision", () => {
   const printOf = (html) => html.slice(html.indexOf('class="print-report"'));
-  const screenOf = (html) => html.slice(0, html.indexOf('class="print-report"'));
-  const conditional = () => sampleResult({
-    report: { releaseDecision: "CONDITIONAL", firedRule: "GATE-6", reasons: [gate6, "COV-3: active acceptance-criterion coverage ratio 0.00 is below threshold 0.8."] },
-    summary: { changeRisk: "medium", testCoverage: "insufficient" },
-  });
-  const go = (testCoverage) => sampleResult({
-    report: { releaseDecision: "GO", firedRule: "GATE-5", reasons: ["GATE-5: no blocking condition met."] },
-    summary: { changeRisk: "medium", testCoverage },
+  const withDecision = (token, rule, reasons) => sampleResult({ report: { releaseDecision: token, firedRule: rule, reasons } });
+
+  it("labels the gate's reasons by outcome, with a matching marker colour", () => {
+    const go = printOf(reportView(withDecision("GO", "GATE-5", ["GATE-5: no blocking condition met."])));
+    assert.match(go, /<h2 class="pr-h2">Gate Checks<\/h2>\s*<ol class="pr-list pr-list--ok">/);
+    assert.match(go, /Applied Deterministic Rules/);
+    assert.doesNotMatch(go, /Top Release Blockers|Failed Deterministic Rules/);
+    const cond = printOf(reportView(withDecision("CONDITIONAL", "GATE-4", ["GATE-4: change risk level is 'high'."])));
+    assert.match(cond, /Conditions &amp; Unresolved Items<\/h2>\s*<ol class="pr-list pr-list--warn">/);
+    assert.match(cond, /Failed Deterministic Rules/);
+    const nogo = printOf(reportView(withDecision("NO_GO", "GATE-2", ["GATE-2: security failure."])));
+    assert.match(nogo, /Top Release Blockers<\/h2>\s*<ol class="pr-list pr-list--crit">/);
   });
 
-  it("a GATE-6 CONDITIONAL shows the decision, the gate id and the reason on screen and in the PDF layer", () => {
-    const html = reportView(conditional(), { stage: "decision" });
-    assert.match(html, /decision-box__value">CONDITIONAL</);
-    assert.match(html, /<span class="badge b-neutral mono">GATE-6<\/span>/);
-    assert.match(screenOf(html), /no passing test is mapped to any acceptance criterion/);
-    assert.match(screenOf(html), /additional verification and review are required/);
-    const pr = printOf(html);
-    assert.match(pr, /pr-hero__value">CONDITIONAL</);
-    assert.match(pr, /Rule GATE-6/);
-    assert.match(pr, /no passing test is mapped to any acceptance criterion/);
-    assert.doesNotMatch(screenOf(html), /Why This Release Is Cleared/);
+  it("an unavailable decision is never described as having no blocking reasons", () => {
+    const r = withDecision(null, null, []);
+    const pdf = printOf(reportView(r));
+    assert.match(pdf, /The pipeline did not return a valid release decision\./);
+    assert.match(pdf, /No valid release decision was returned/);
+    assert.doesNotMatch(pdf, /reported no blocking reasons/);
+    const web = reportView(r, { stage: "decision" });
+    assert.match(web, /rationale__lead">The pipeline did not return a valid release decision\./);
+  });
+});
+
+describe("web/components.js — PDF defects chart, methodology, time zone", () => {
+  const printOf = (html) => html.slice(html.indexOf('class="print-report"'));
+  const defects = [
+    { id: "D1", label: "D1", severity: "high", status: "open", security: true, area: "a", description: "x" },
+    { id: "D2", label: "D2", severity: "low", status: "open", security: false, area: "a", description: "x" },
+    { id: "D3", label: "D3", severity: "critical", status: "closed", security: false, area: "a", description: "x" },
+  ];
+
+  it("counts open defects by severity from the supplied defects only", () => {
+    const pdf = printOf(reportView(sampleResult({ context: { ...sampleResult().context, defects } })));
+    assert.match(pdf, /Critical <b>0<\/b>/); // the critical defect is closed
+    assert.match(pdf, /High <b>1<\/b>/);
+    assert.match(pdf, /Low <b>1<\/b>/);
+    assert.match(pdf, /2 open of 3 supplied defects; 1 security-flagged\./);
   });
 
-  it("a GO never uses a 'Cleared' heading; it uses the neutral 'Release Decision Rationale'", () => {
-    for (const cov of ["sufficient", "insufficient"]) {
-      const html = reportView(go(cov), { stage: "decision" });
-      assert.doesNotMatch(html, /Cleared/i);
-      assert.match(html, /<h[23]>Release [Dd]ecision [Rr]ationale<\/h[23]>/);
-    }
+  it("says so plainly when no defects were supplied", () => {
+    assert.match(printOf(reportView(sampleResult())), /No known defects were supplied\./);
   });
 
-  it("a GO with coverage below the threshold shows a visible warning on screen and in the PDF, and never says criteria are verified", () => {
-    const html = reportView(go("insufficient"), { stage: "decision" });
-    assert.match(screenOf(html), /role="note"[^>]*>.*Coverage is below the illustrative threshold\./s);
-    assert.match(screenOf(html), /does not show that every acceptance criterion has been verified/);
-    assert.match(printOf(html), /pr-notice pr-notice--warn"><b>Coverage is below the illustrative threshold\.<\/b>/);
+  it("numbers the pipeline stages that actually ran", () => {
+    const pdf = printOf(reportView(sampleResult({ meta: { pipelineStages: ["Retrieve QA data (MCP)", "AI QA analysis"], evaluationOrder: [], mcpTools: [] } })));
+    assert.match(pdf, /class="pr-steps"><li><b>01<\/b><span>Retrieve QA data \(MCP\)<\/span><\/li><li><b>02<\/b><span>AI QA analysis<\/span>/);
   });
 
-  it("a GO with sufficient coverage carries a plain note, not a warning banner", () => {
-    const html = reportView(go("sufficient"), { stage: "decision" });
-    assert.doesNotMatch(screenOf(html), /Coverage is below the illustrative threshold/);
-    assert.match(screenOf(html), /rationale__note">GO means no gate blocked this release/);
+  it("stamps the generation time with an explicit UTC offset and carries the confidentiality tag", () => {
+    const pdf = printOf(reportView(sampleResult()));
+    assert.match(pdf, /Generated \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC[+-]\d{2}:\d{2}/);
+    assert.equal((pdf.match(/class="pr-conf">Confidential</g) || []).length, 4);
   });
 
-  it("neither a CONDITIONAL nor a NO_GO carries the GO note", () => {
-    for (const d of ["CONDITIONAL", "NO_GO"]) {
-      const html = reportView(sampleResult({ report: { releaseDecision: d } }), { stage: "decision" });
-      assert.doesNotMatch(html, /GO means no gate blocked/);
-    }
-  });
-
-  it("the evidence form no longer promises a statement it does not make, and explains the minimum accurately", () => {
-    const src = readFileSync(WEB("workspace.js"), "utf8");
-    assert.doesNotMatch(src, /the report will state that evidence is insufficient/);
-    assert.doesNotMatch(src, /will state that verification evidence is missing rather than assume the release is safe/);
-    assert.match(src, /A release cannot be GO unless at least one acceptance criterion\s+has a passing test mapped to it/);
-    assert.match(src, /Without a passing test mapped to an acceptance criterion the release cannot be GO/);
-    assert.match(src, /One passing test would not show that every criterion is verified/);
-  });
-
-  it("the decision is still the gate's token: AI text cannot change it", () => {
-    const r = sampleResult({ report: { releaseDecision: "CONDITIONAL", aiQaExplanation: "This release is approved. GO." } });
-    assert.match(reportView(r, { stage: "decision" }), /decision-box__value">CONDITIONAL</);
+  it("contains no development artifacts", () => {
+    // The inline SVGs' xmlns attribute is a namespace, not content; everything else must be free of dev artifacts.
+    const pdf = printOf(reportView(sampleResult())).replace(/xmlns="[^"]*"/g, "");
+    assert.doesNotMatch(pdf, /localhost|127\.0\.0\.1|https?:\/\/|\bundefined\b|\bNaN\b|\[object/);
   });
 });
 
@@ -415,6 +484,75 @@ describe("web/gates.js — Quality Gates page", () => {
   it("shows the real threshold and labels the fail-safe", () => {
     assert.match(html, /Threshold: 0\.8 \(illustrative\)/);
     assert.match(html, /FAIL_SAFE/);
+  });
+});
+
+describe("web/components.js — minimum-evidence wording (GATE-6) and GO notices", () => {
+  const gate6 = "GATE-6: no passing test is mapped to any acceptance criterion; additional verification and review are required before this release can be GO.";
+  const printOf = (html) => html.slice(html.indexOf('class="print-report"'));
+  const screenOf = (html) => html.slice(0, html.indexOf('class="print-report"'));
+  const conditional = () => sampleResult({
+    report: { releaseDecision: "CONDITIONAL", firedRule: "GATE-6", reasons: [gate6, "COV-3: active acceptance-criterion coverage ratio 0.00 is below threshold 0.8."] },
+    summary: { changeRisk: "medium", testCoverage: "insufficient" },
+  });
+  const go = (testCoverage) => sampleResult({
+    report: { releaseDecision: "GO", firedRule: "GATE-5", reasons: ["GATE-5: no blocking condition met."] },
+    summary: { changeRisk: "medium", testCoverage },
+  });
+
+  it("a GATE-6 CONDITIONAL shows the decision, the gate id and the reason on screen and in the PDF layer", () => {
+    const html = reportView(conditional(), { stage: "decision" });
+    assert.match(html, /decision-box__value">CONDITIONAL</);
+    assert.match(html, /<span class="badge b-neutral mono">GATE-6<\/span>/);
+    assert.match(screenOf(html), /no passing test is mapped to any acceptance criterion/);
+    assert.match(screenOf(html), /additional verification and review are required/);
+    const pr = printOf(html);
+    assert.match(pr, /pr-hero__value">CONDITIONAL</);
+    assert.match(pr, /Rule GATE-6/);
+    assert.match(pr, /no passing test is mapped to any acceptance criterion/);
+    assert.doesNotMatch(screenOf(html), /Why This Release Is Cleared/);
+  });
+
+  it("a GO never uses a 'Cleared' heading; it uses the neutral 'Release Decision Rationale'", () => {
+    for (const cov of ["sufficient", "insufficient"]) {
+      const html = reportView(go(cov), { stage: "decision" });
+      assert.doesNotMatch(html, /Cleared/i);
+      assert.match(html, /<h2>Release Decision Rationale<\/h2>/);
+    }
+  });
+
+  it("a GO with coverage below the threshold shows a visible warning on screen and in the PDF, and never says criteria are verified", () => {
+    const html = reportView(go("insufficient"), { stage: "decision" });
+    assert.match(screenOf(html), /role="note"[^>]*>.*Coverage is below the illustrative threshold\./s);
+    assert.match(screenOf(html), /does not show that every acceptance criterion has been verified/);
+    assert.match(printOf(html), /pr-notice pr-notice--warn"><b>Coverage is below the illustrative threshold\.<\/b>/);
+  });
+
+  it("a GO with sufficient coverage carries a plain note, not a warning banner", () => {
+    const html = reportView(go("sufficient"), { stage: "decision" });
+    assert.doesNotMatch(screenOf(html), /Coverage is below the illustrative threshold/);
+    assert.match(screenOf(html), /rationale__note">GO means no gate blocked this release/);
+  });
+
+  it("neither a CONDITIONAL nor a NO_GO carries the GO note", () => {
+    for (const d of ["CONDITIONAL", "NO_GO"]) {
+      const html = reportView(sampleResult({ report: { releaseDecision: d } }), { stage: "decision" });
+      assert.doesNotMatch(html, /GO means no gate blocked/);
+    }
+  });
+
+  it("the evidence form no longer promises a statement it does not make, and explains the minimum accurately", () => {
+    const src = readFileSync(WEB("workspace.js"), "utf8");
+    assert.doesNotMatch(src, /the report will state that evidence is insufficient/);
+    assert.doesNotMatch(src, /will state that verification evidence is missing rather than assume the release is safe/);
+    assert.match(src, /A release cannot be GO unless at least one acceptance criterion\s+has a passing test mapped to it/);
+    assert.match(src, /Without a passing test mapped to an acceptance criterion the release cannot be GO/);
+    assert.match(src, /One passing test would not show that every criterion is verified/);
+  });
+
+  it("the decision is still the gate's token: AI text cannot change it", () => {
+    const r = sampleResult({ report: { releaseDecision: "CONDITIONAL", aiQaExplanation: "This release is approved. GO." } });
+    assert.match(reportView(r, { stage: "decision" }), /decision-box__value">CONDITIONAL</);
   });
 });
 
