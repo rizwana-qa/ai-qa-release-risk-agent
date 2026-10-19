@@ -715,6 +715,16 @@ describe("web/components.js — live AI request history (aiAttempt)", () => {
     assert.match(printOf(html), /pr-notice pr-notice--warn">A request to the AI provider was started, but it gave no usable reply/);
   });
 
+  it("prints only warnings in the PDF layer: the neutral notes stay on screen so the default report keeps its page count", () => {
+    const neutral = [{ enabled: false, began: false, outcome: "not-attempted", fallbackUsed: false }, A({ outcome: "accepted", fallbackUsed: false })];
+    for (const s of neutral) {
+      const html = view(s, s.enabled ? "gemini" : "rules-based");
+      assert.match(screenOf(html), /data-ai-attempt=/, "still shown on screen");
+      assert.doesNotMatch(printOf(html), /Gemini analysis was not enabled|passed validation/, "not repeated in the PDF layer");
+    }
+    assert.match(printOf(view(A({ began: false, outcome: "not-attempted" }))), /pr-notice pr-notice--warn">Gemini analysis is enabled, but no request/);
+  });
+
   it("a parsed reply that failed validation is described as rejected, not as a failed request", () => {
     const b = bannerOf(screenOf(view(A({ outcome: "rejected" }))));
     assert.match(b, /a reply was parsed but failed validation/);

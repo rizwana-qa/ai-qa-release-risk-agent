@@ -1147,8 +1147,11 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
           return x && !x.empty ? `<p class="pr-notice pr-notice--warn"><b>${x.confirmed.length ? "AI disagreed with the evidence." : "AI statements need checking."}</b> ${esc(x.summary)} The evidence and the gate decision are unaffected.</p>` : "";
         })()}
         ${(() => {
+          // Only a warning is printed (a request began and did not give usable findings, or none could start). The neutral
+          // "not enabled" and "accepted" notes stay on screen: the PDF already shows the mode, and an extra paragraph here
+          // pushes the default report onto a fifth page.
           const t = aiAttemptText(result?.aiAttempt);
-          return t ? `<p class="${t.warn ? "pr-notice pr-notice--warn" : "pr-note"}">${esc(t.text)}</p>` : "";
+          return t && t.warn ? `<p class="pr-notice pr-notice--warn">${esc(t.text)}</p>` : "";
         })()}
         <p class="pr-note">AI analysis explains the risk; it does not override the deterministic gate's decision.</p></section>
     </div>
