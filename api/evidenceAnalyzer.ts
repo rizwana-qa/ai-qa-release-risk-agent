@@ -42,6 +42,20 @@ interface DbTest { testId: string; area: string; status: string; covers: string[
 interface DbDefect { defectId: string; severity: string; status: string; area: string; security: boolean }
 interface DbCov { acceptanceCriterionId: string; area: string; covered: boolean; activeTests: string[]; mappedTests: string[] }
 
+/**
+ * The coverage threshold from the rules dataset: the COV-3 condition's `illustrativeThreshold`, the same
+ * place the adapter reads it from. Returns null when it is absent or not a usable ratio, in which case
+ * the narrative states no threshold rather than inventing one.
+ */
+export function coverageThreshold(datasets: NormalizedDatasets): number | null {
+  const conditions = (datasets.riskRules as any)?.insufficientCoverageRule?.conditions;
+  const cov3 = Array.isArray(conditions) ? conditions.find((c: any) => c?.id === "COV-3") : undefined;
+  const t = cov3?.illustrativeThreshold;
+  return typeof t === "number" && t > 0 && t <= 1 ? t : null;
+}
+
+const formatPercent = (ratio: number): string => `${Math.round(ratio * 1000) / 10}%`;
+
 export function analyzeEvidence(
   datasets: NormalizedDatasets,
   context: AssessmentContext,
@@ -155,8 +169,9 @@ export function analyzeEvidence(
   if (uncoveredCritical.length) {
     parts.push(`${uncoveredCritical.length} critical ${plural(uncoveredCritical.length, "acceptance criterion", "acceptance criteria")} ${plural(uncoveredCritical.length, "has", "have")} no active (passing) test coverage: ${uncoveredCritical.map((a) => a.id).join(", ")}.`);
   }
-  if (coverageStats.coveragePercent < 80) {
-    parts.push(`Active coverage is ${coverageStats.coveragePercent}% of acceptance criteria, below the 80% threshold.`);
+  const threshold = coverageThreshold(datasets);
+  if (threshold !== null && coverageStats.coveragePercent < threshold * 100) {
+    parts.push(`Active coverage is ${coverageStats.coveragePercent}% of acceptance criteria, below the ${formatPercent(threshold)} threshold.`);
   }
   parts.push(
     "The deterministic release gate evaluated these facts to produce the decision shown above. " +

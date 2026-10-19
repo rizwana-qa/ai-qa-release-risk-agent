@@ -18,10 +18,11 @@
 
 import { pathToFileURL } from "node:url";
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type, type Schema } from "@google/genai";
 
-import { AGENT_SYSTEM_PROMPT, type AnalyzeFn, type AgentContext } from "./agentContract.ts";
+import { AGENT_SYSTEM_PROMPT, FINDING_SEVERITIES, PRIORITY_LEVELS, type AnalyzeFn, type AgentContext } from "./agentContract.ts";
 import { runReleaseAssessment } from "./releaseAssessment.ts";
+import { sanitizeProviderError } from "./providerError.ts";
 
 const DEFAULT_MODEL = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
 
@@ -37,14 +38,86 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS) || 20_000;
 /** The user-turn prompt sent to Gemini. Pure and independently testable. */
 export function buildGeminiPrompt(context: AgentContext): string {
   return [
-    "Analyse the change using ONLY the data below — it has already been retrieved",
-    "from the four tools named in the system prompt, so there is nothing further to fetch.",
+    "Analyse the release described by the data below, using ONLY that data. It is the complete",
+    "evidence available, so there is nothing further to fetch. Say so where it is insufficient.",
     "Reply with ONLY the JSON findings object described in the system prompt: no prose,",
     "no markdown code fences, no commentary before or after the JSON.",
     "",
     "DATA:",
     JSON.stringify(context.datasets, null, 2),
   ].join("\n");
+}
+
+const str = (description: string): Schema => ({ type: Type.STRING, description });
+const strEnum = (values: readonly string[]): Schema => ({ type: Type.STRING, enum: [...values] });
+const list = (items: Schema, minItems?: string): Schema => ({ type: Type.ARRAY, items, ...(minItems ? { minItems } : {}) });
+const obj = (properties: Record<string, Schema>): Schema => ({
+  type: Type.OBJECT,
+  properties,
+  required: Object.keys(properties),
+  propertyOrdering: Object.keys(properties),
+});
+
+/**
+ * Provider-side response schema, mirroring {@link AgentFindings} (src/agentContract.ts).
+ * It narrows what Gemini may return; it is NOT trusted. `validateAgentFindings()` and the
+ * adapter's grounding checks still run on every response. It deliberately has no decision
+ * field, so the model is never invited to produce one.
+ */
+export const AGENT_RESPONSE_SCHEMA: Schema = obj({
+  schemaVersion: { type: Type.INTEGER, description: "Always 1." },
+  changeSummary: str("One or two sentences describing the change, from DATA only."),
+  identifiedRisks: list(obj({ area: str("Area name from DATA."), description: str("The risk; label inferences 'Inference:'."), severity: strEnum(FINDING_SEVERITIES) }), "1"),
+  coverageAssessment: list(obj({ acceptanceCriterionId: str("Acceptance criterion id from DATA."), covered: { type: Type.BOOLEAN, description: "True only if DATA shows a passing (active) test mapped to this criterion." }, notes: str("Facts with ids; inferences labelled.") }), "1"),
+  missingScenarios: list(str("A missing scenario, or 'Insufficient evidence: ...'.")),
+  defectReview: list(obj({ defectId: str("Defect id from DATA."), stillRelevant: { type: Type.BOOLEAN, description: "Whether the defect still matters to this release." }, notes: str("Facts with ids; inferences labelled.") })),
+  regressionPriorities: list(obj({ area: str("Area name from DATA."), priority: strEnum(PRIORITY_LEVELS), rationale: str("Why; inferences labelled.") }), "1"),
+  releaseRiskExplanation: str("Plain-language explanation of the risk. Analysis only: no decision."),
+  dataProvenance: obj({
+    requirementId: str("Copied from DATA."),
+    acceptanceCriteriaCount: { type: Type.INTEGER, description: "Number of acceptance criteria in DATA." },
+    existingTestCount: { type: Type.INTEGER, description: "Number of test cases in DATA." },
+    knownDefectCount: { type: Type.INTEGER, description: "Number of defects in DATA." },
+    riskRulesScenario: str("Copied from DATA."),
+  }),
+});
+
+/**
+ * Environment variables the installed `@google/genai` (1.52.0) reads by itself and that can switch the
+ * Google product (Vertex AI / Enterprise Agent Platform instead of the Gemini Developer API) or the
+ * endpoint. Found by reading the SDK source, so re-check this list when the SDK is upgraded.
+ */
+export const ROUTING_ENV_VARS = [
+  "GOOGLE_GENAI_USE_VERTEXAI",
+  "GOOGLE_GENAI_USE_ENTERPRISE",
+  "GOOGLE_CLOUD_PROJECT",
+  "GOOGLE_CLOUD_LOCATION",
+  "GOOGLE_VERTEX_BASE_URL",
+  "GOOGLE_GEMINI_BASE_URL",
+  "GEMINI_NEXT_GEN_API_BASE_URL",
+] as const;
+
+/**
+ * The intended integration is the Gemini Developer API at the SDK's default endpoint. If any variable that
+ * can redirect the request is set, refuse to call (fail closed) rather than send evidence somewhere
+ * unexpected or silently ignore the setting. Only variable NAMES are reported, never values. This checks
+ * routing only: it does not establish which account tier or data-use terms apply.
+ */
+export function assertDeveloperApiRouting(env: NodeJS.ProcessEnv = process.env): void {
+  const set = ROUTING_ENV_VARS.filter((name) => (env[name] ?? "").trim() !== "");
+  if (set.length > 0) {
+    throw new Error(
+      `Live Gemini analysis was not attempted: the environment sets ${set.join(", ")}, which can send requests to a different Google product or endpoint. ` +
+        "Unset them to use the Gemini Developer API, or have that configuration reviewed and approved first. (Variable names only; values are not shown.)",
+    );
+  }
+}
+
+/** The key must come from GEMINI_API_KEY; never let the SDK fall back to another variable such as GOOGLE_API_KEY. */
+function requireGeminiApiKey(env: NodeJS.ProcessEnv = process.env): string {
+  const key = env.GEMINI_API_KEY?.trim();
+  if (!key) throw new Error("Live Gemini analysis was not attempted: GEMINI_API_KEY is not set.");
+  return key;
 }
 
 /** Minimal shape this module reads off a Gemini response, kept narrow for easy testing. */
@@ -117,10 +190,16 @@ export function createGeminiAnalyzeFn(
   opts: { model?: string; client?: GoogleGenAI; timeoutMs?: number } = {},
 ): AnalyzeFn {
   const model = opts.model ?? DEFAULT_MODEL;
-  const client = opts.client ?? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  let client = opts.client;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return async (context: AgentContext): Promise<unknown> => {
+    if (!client) {
+      // Checked here, before any client exists, so a bad configuration makes this call reject (fail closed)
+      // and the pipeline's usual failure handling applies. An injected client (tests) skips this.
+      assertDeveloperApiRouting();
+      client = new GoogleGenAI({ apiKey: requireGeminiApiKey(), vertexai: false });
+    }
     const controller = new AbortController();
     const response = await raceWithTimeout(
       client.models.generateContent({
@@ -129,6 +208,7 @@ export function createGeminiAnalyzeFn(
         config: {
           systemInstruction: AGENT_SYSTEM_PROMPT,
           responseMimeType: "application/json",
+          responseSchema: AGENT_RESPONSE_SCHEMA,
           abortSignal: controller.signal,
           httpOptions: { timeout: timeoutMs },
         },
@@ -171,7 +251,7 @@ const invokedDirectly =
 
 if (invokedDirectly) {
   main().catch((err: unknown) => {
-    console.error("[geminiAgent] fatal:", err);
+    console.error("[geminiAgent] fatal:", sanitizeProviderError(err));
     process.exit(1);
   });
 }

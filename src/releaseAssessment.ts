@@ -23,6 +23,7 @@ import {
   type AgentFindings,
 } from "./agentContract.ts";
 import { validateAgentFindings } from "./agentOutputValidation.ts";
+import { sanitizeProviderError } from "./providerError.ts";
 import {
   adaptAgentFindingsToReleaseFindings,
   type SyntheticDatasets,
@@ -105,8 +106,8 @@ export async function runReleaseAssessment(options: RunOptions): Promise<Release
     rawAgentOutput = await options.analyze(context);
     pipeline.push({ step: "agent-analyze", ok: true });
   } catch (err) {
-    pipeline.push({ step: "agent-analyze", ok: false, detail: err instanceof Error ? err.message : String(err) });
-    return failSafe(pipeline, [`agent-analyze failed: ${err instanceof Error ? err.message : String(err)}`], null);
+    pipeline.push({ step: "agent-analyze", ok: false, detail: sanitizeProviderError(err) });
+    return failSafe(pipeline, [`agent-analyze failed: ${sanitizeProviderError(err)}`], null);
   }
 
   // 3. Validate the raw agent output.

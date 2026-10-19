@@ -55,7 +55,6 @@ export function buildPolicy(areas: readonly string[], scenarioId: string): Recor
 
   return {
     schemaVersion: "1.0",
-    synthetic: true,
     disclaimer:
       "Fixed QA release-risk policy applied to a user-submitted assessment. Risk levels are derived from area classification. Users cannot modify the deterministic release gate rules.",
     servedByTool: "get_risk_rules",

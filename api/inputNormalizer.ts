@@ -306,8 +306,8 @@ export function normalizeAssessmentInput(payload: RawAssessmentPayload): Normali
 
   const requirement = {
     schemaVersion: "1.0",
-    synthetic: true,
-    disclaimer: "User-submitted assessment context. Not real production data.",
+    // No `synthetic` flag: this application cannot tell whether submitted evidence is synthetic, anonymised or real.
+    disclaimer: "User-submitted assessment context, supplied as entered. The application does not check whether it is synthetic, anonymised or real.",
     servedByTool: "get_requirement",
     requirement: {
       requirementId,
@@ -323,7 +323,6 @@ export function normalizeAssessmentInput(payload: RawAssessmentPayload): Normali
 
   const existingTests = {
     schemaVersion: "1.0",
-    synthetic: true,
     servedByTool: "get_existing_tests",
     scenario: requirementId,
     testTypes: ["unit", "integration", "e2e"],
@@ -350,7 +349,6 @@ export function normalizeAssessmentInput(payload: RawAssessmentPayload): Normali
 
   const knownDefects = {
     schemaVersion: "1.0",
-    synthetic: true,
     servedByTool: "get_known_defects",
     scenario: requirementId,
     severities: [...SEVERITIES],

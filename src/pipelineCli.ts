@@ -25,7 +25,9 @@ import { fetchDatasetsViaMcp, type FetchedDatasets } from "./mcpDataClient.ts";
 import { createGeminiAnalyzeFn } from "./geminiAgent.ts";
 import { validateAgentFindings } from "./agentOutputValidation.ts";
 import { adaptAgentFindingsToReleaseFindings } from "./findingsAdapter.ts";
-import { evaluateReleaseGate } from "./releaseGate.ts";
+import { evaluateReleaseGate, type ReleaseFindings } from "./releaseGate.ts";
+import { sanitizeProviderError } from "./providerError.ts";
+import { crossCheckAgentFindings, formatCrossCheckDetail, CROSS_CHECK_STEP } from "./aiCrossCheck.ts";
 import {
   AGENT_SYSTEM_PROMPT,
   AGENT_ANALYSIS_STEPS,
@@ -123,7 +125,7 @@ async function stepAnalyze(state: PipelineState, analyze: AnalyzeFn): Promise<vo
     });
     state.trace.push({ step: "ai-reasoning", ok: true });
   } catch (err) {
-    state.trace.push({ step: "ai-reasoning", ok: false, detail: msg(err) });
+    state.trace.push({ step: "ai-reasoning", ok: false, detail: sanitizeProviderError(err) }); // reaches reports: no keys or diagnostics
   }
 }
 
@@ -139,6 +141,21 @@ function stepValidate(state: PipelineState): void {
   }
 }
 
+/**
+ * Compare the AI's findings with the adapted evidence and record any disagreement as a trace entry.
+ * Advisory only: it never touches the adapter result or the gate input, and a failure here cannot
+ * change the pipeline outcome. Nothing is recorded when there is nothing to report.
+ */
+function recordCrossCheck(state: PipelineState, agent: AgentFindings, facts: ReleaseFindings): void {
+  state.trace = state.trace.filter((t) => t.step !== CROSS_CHECK_STEP); // a retried batch replaces the earlier result
+  try {
+    const detail = formatCrossCheckDetail(crossCheckAgentFindings(agent, facts));
+    if (detail) state.trace.push({ step: CROSS_CHECK_STEP, ok: true, detail });
+  } catch (err) {
+    state.trace.push({ step: CROSS_CHECK_STEP, ok: true, detail: `AI vs evidence: the check could not run (${msg(err)}).` });
+  }
+}
+
 function stepAdapt(state: PipelineState): void {
   if (!state.agentFindings || !state.datasets) {
     state.adapterResult = { ok: false, problems: ["no valid agent findings or datasets to adapt"] };
@@ -148,6 +165,8 @@ function stepAdapt(state: PipelineState): void {
   const r = adaptAgentFindingsToReleaseFindings(state.agentFindings, state.datasets);
   if (r.ok) {
     state.adapterResult = { ok: true, releaseFindings: r.releaseFindings };
+    // Recorded before the adapter entry so the adapt step's own entry stays the last one written.
+    recordCrossCheck(state, state.agentFindings, r.releaseFindings);
     state.trace.push({ step: "deterministic-adapter", ok: true });
   } else {
     state.adapterResult = { ok: false, problems: r.problems };
