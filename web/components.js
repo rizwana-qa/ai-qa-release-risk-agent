@@ -64,7 +64,7 @@ function pageHead(stageNo, title, sub) {
 /** The execution-mode label, unchanged from the Technical details panel: it is
  * promoted to a visible chip so the mode is never hidden. */
 function modeLabel(mode) {
-  return mode === "gemini" ? "AI analysis: Gemini 3.6 Flash"
+  return mode === "gemini" ? "AI analysis: Gemini"
     : mode === "recorded" ? "Recorded"
     : "QA analysis mode: Rules based";
 }
@@ -509,10 +509,36 @@ function evidenceCard(report, cov, ctx) {
   </section>`;
 }
 
+/** The deterministic AI-vs-evidence cross-check, read from the pipeline trace. Display only: the lines are
+ * written by the backend (src/aiCrossCheck.ts); nothing is compared or decided here. Null when it found nothing. */
+function crossCheckOf(report) {
+  const t = (Array.isArray(report?.pipelineTrace) ? report.pipelineTrace : []).find((x) => x.step === "ai-evidence-crosscheck");
+  if (!t || typeof t.detail !== "string") return null;
+  const lines = t.detail.split("\n");
+  const pick = (tag) => lines.filter((l) => l.startsWith(`[${tag}] `)).map((l) => l.slice(tag.length + 3));
+  const confirmed = pick("confirmed"), heuristic = pick("heuristic"), notVerified = pick("not verified");
+  if (!confirmed.length && !heuristic.length) return { summary: lines[0] || "", confirmed, heuristic, notVerified, empty: true };
+  return { summary: lines[0] || "", confirmed, heuristic, notVerified, empty: false };
+}
+
+function crossCheckBanner(report) {
+  const x = crossCheckOf(report);
+  if (!x) return "";
+  if (x.empty) return `<div class="banner banner--warn" role="note"><span class="ico">${ICONS.alert}</span><div><b>The AI cross-check could not run.</b> ${esc(x.summary)}</div></div>`;
+  const items = (list, label) => list.map((m) => `<li><b>${label}:</b> ${esc(m)}</li>`).join("");
+  return `<div class="banner banner--warn" role="note"><span class="ico">${ICONS.alert}</span><div>
+      <b>${x.confirmed.length ? "AI disagreed with the evidence." : "AI statements need checking."}</b>
+      ${esc(x.summary)} The evidence is authoritative and the release decision is unaffected.
+      <ul>${items(x.confirmed, "Confirmed contradiction")}${items(x.heuristic, "Heuristic warning")}</ul>
+      <p class="hint">${esc(x.notVerified.join(" "))}</p>
+    </div></div>`;
+}
+
 /** The AI's own narrative, labelled advisory and kept apart from the gate's decision. */
 function aiAssessmentCallout(report) {
   return `<section class="callout callout--ai" aria-labelledby="ai-h">
     <div class="callout__head"><span class="ico">${ICONS.sparkle}</span><h2 id="ai-h">AI Assessment</h2><span class="lane lane--ai">Advisory</span></div>
+    ${crossCheckBanner(report)}
     <p>${report.aiQaExplanation ? formatFreeText(report.aiQaExplanation) : "No explanation was produced."}</p>
     <p class="hint">AI analysis explains the risk; it does not override the deterministic gate's decision.</p>
   </section>`;
@@ -969,7 +995,7 @@ function technicalAccordion(result, report, meta, mode) {
 
   const body = `<div class="tech-body">
     <dl class="kv">
-      <dt>Execution mode</dt><dd>${esc(modeLabel(mode))}${mode === "rules-based" ? `<span class="muted">. Offline analysis of your submitted evidence; no live model call.</span>` : ""}</dd>
+      <dt>Execution mode</dt><dd>${esc(modeLabel(mode))}${mode === "rules-based" ? `<span class="muted">. Offline rules-based analysis ran on this server. This report cannot show whether a live Gemini request was attempted first and failed; if Gemini analysis is enabled for this deployment, a failed attempt may have sent the evidence.</span>` : ""}</dd>
       <dt>Findings validation</dt><dd>${report.agentOutputValid === true ? badge("Passed", "b-low") : badge("Failed / n/a", "b-high")}</dd>
       <dt>Adapter status</dt><dd>${report.adapterOk === true ? badge("Passed", "b-low") : badge("Failed / n/a", "b-high")}</dd>
       <dt>Gate rule fired</dt><dd class="mono">${esc(report.firedRule || "N/A")}</dd>
@@ -1093,6 +1119,10 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
         <p class="pr-note">Risk-register signals by severity or priority label.</p></section>
       <section class="pr-box pr-box--ai"><h3 class="pr-h3">AI Findings <span class="pr-tag">Advisory</span></h3>
         <p class="pr-para">${esc(report.aiQaExplanation || "No explanation was produced.")}</p>
+        ${(() => {
+          const x = crossCheckOf(report);
+          return x && !x.empty ? `<p class="pr-notice pr-notice--warn"><b>${x.confirmed.length ? "AI disagreed with the evidence." : "AI statements need checking."}</b> ${esc(x.summary)} The evidence and the gate decision are unaffected.</p>` : "";
+        })()}
         <p class="pr-note">AI analysis explains the risk; it does not override the deterministic gate's decision.</p></section>
     </div>
 

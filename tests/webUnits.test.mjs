@@ -556,6 +556,119 @@ describe("web/components.js — minimum-evidence wording (GATE-6) and GO notices
   });
 });
 
+describe("web/components.js — AI-versus-evidence cross-check warning", () => {
+  const detail = [
+    "AI vs evidence: 1 confirmed contradiction, 1 heuristic warning.",
+    "[confirmed] The AI says AC-8 is covered, but no passing test is mapped to it (1 mapped test(s), 0 passing).",
+    "[heuristic] The AI marks DEF-004 as no longer relevant, but the evidence shows it is open (high, security-flagged).",
+    "[not verified] The change summary, risk explanation, missing scenarios and free-text notes are not checked against the evidence.",
+  ].join("\n");
+  const withCheck = (d = detail) => sampleResult({ report: { pipelineTrace: [...sampleResult().report.pipelineTrace, { step: "ai-evidence-crosscheck", ok: true, detail: d }] } });
+  const screenOf = (html) => html.slice(0, html.indexOf('class="print-report"'));
+  const printOf = (html) => html.slice(html.indexOf('class="print-report"'));
+
+  it("shows a visible warning that separates confirmed contradictions from heuristic warnings and says what is not verified", () => {
+    const screen = screenOf(reportView(withCheck(), { stage: "decision" }));
+    assert.match(screen, /role="note"[^>]*>.*AI disagreed with the evidence\./s);
+    assert.match(screen, /<b>Confirmed contradiction:<\/b> The AI says AC-8 is covered/);
+    assert.match(screen, /<b>Heuristic warning:<\/b> The AI marks DEF-004/);
+    assert.match(screen, /free-text notes are not checked against the evidence/);
+  });
+
+  it("states that the evidence is authoritative and the decision is unaffected", () => {
+    const screen = screenOf(reportView(withCheck(), { stage: "decision" }));
+    assert.match(screen, /The evidence is authoritative and the release decision is unaffected\./);
+    assert.match(screen, /decision-box__value">CONDITIONAL</);
+  });
+
+  it("uses the milder wording when there are only heuristic warnings", () => {
+    const heuristicOnly = detail.split("\n").filter((l) => !l.startsWith("[confirmed]")).join("\n").replace("1 confirmed contradiction", "0 confirmed contradictions");
+    const screen = screenOf(reportView(withCheck(heuristicOnly), { stage: "decision" }));
+    assert.match(screen, /AI statements need checking\./);
+    assert.doesNotMatch(screen, /AI disagreed with the evidence/);
+  });
+
+  it("shows nothing when the cross-check recorded nothing", () => {
+    const html = reportView(sampleResult(), { stage: "decision" });
+    assert.doesNotMatch(html, /AI disagreed with the evidence|AI statements need checking/);
+  });
+
+  it("escapes the backend text it displays", () => {
+    const screen = screenOf(reportView(withCheck("AI vs evidence: 1 confirmed contradiction, 0 heuristic warnings.\n[confirmed] <img src=x onerror=alert(1)>"), { stage: "decision" }));
+    assert.doesNotMatch(screen, /<img src=x/);
+    assert.match(screen, /&lt;img src=x/);
+  });
+
+  it("repeats the warning in the PDF layer, without implying AI approval", () => {
+    const pr = printOf(reportView(withCheck(), { stage: "decision" }));
+    assert.match(pr, /pr-notice pr-notice--warn"><b>AI disagreed with the evidence\.<\/b>/);
+    assert.match(pr, /The evidence and the gate decision are unaffected\./);
+  });
+});
+
+describe("web/components.js — the execution-mode line makes no false claim about a live request", () => {
+  const technical = (mode) => reportView(sampleResult({ mode }), { stage: "decision" });
+
+  it("rules-based: says an offline analysis ran, and that the report cannot show whether a live attempt came first", () => {
+    const html = technical("rules-based");
+    assert.match(html, /Execution mode/);
+    assert.match(html, /QA analysis mode: Rules based/);
+    assert.match(html, /Offline rules-based analysis ran on this server/);
+    assert.match(html, /cannot show whether a live Gemini request was attempted first and failed/);
+    assert.doesNotMatch(html, /no live model call/i);
+  });
+
+  it("gemini: names the mode without naming a model the browser cannot know, and adds no fallback caveat", () => {
+    const html = technical("gemini");
+    assert.match(html, /AI analysis: Gemini</);
+    assert.doesNotMatch(html, /3\.6|Flash/);
+    assert.doesNotMatch(html, /cannot show whether a live Gemini request was attempted/);
+  });
+
+  it("the gate decision still comes from the report, not from the mode", () => {
+    for (const mode of ["gemini", "rules-based"]) {
+      assert.match(reportView(sampleResult({ mode }), { stage: "decision" }), /decision-box__value">CONDITIONAL</);
+    }
+  });
+});
+
+describe("Evidence notice claims match what the normaliser really sends to the model", () => {
+  it("sends the release name, story, scope, criteria, test titles and defect descriptions; not business rules, TXT notes or file names", async () => {
+    const { normalizeAssessmentInput } = await import("../api/inputNormalizer.ts");
+    const { SCENARIOS } = await import("./evaluation/scenarios.ts");
+    const p = structuredClone(SCENARIOS[0].payload);
+    p.releaseName = "NoticeCheckReleaseName";
+    p.userStory = "NoticeCheckUserStory so that it is recorded.";
+    p.releaseScope = "NoticeCheckScope for the release.";
+    p.acceptanceCriteria[0].text = "NoticeCheckCriterion text.";
+    p.testCases[0].title = "NoticeCheckTestTitle";
+    p.knownDefects[0].description = "NoticeCheckDefectText";
+    p.businessRules = [{ text: "NoticeCheckBusinessRule" }];
+    p.supportingDocuments = [
+      { name: "NoticeCheckFileName.txt", size: 12, type: "txt", note: "NoticeCheckTxtNote" },
+      { name: "NoticeCheckSpec.pdf", size: 99, type: "pdf" },
+    ];
+    const r = normalizeAssessmentInput(p);
+    assert.equal(r.ok, true);
+    const sent = JSON.stringify(r.datasets);
+    for (const m of ["NoticeCheckReleaseName", "NoticeCheckUserStory", "NoticeCheckScope", "NoticeCheckCriterion", "NoticeCheckTestTitle", "NoticeCheckDefectText"]) {
+      assert.ok(sent.includes(m), `${m} should reach the model, as the notice says`);
+    }
+    for (const m of ["NoticeCheckBusinessRule", "NoticeCheckTxtNote", "NoticeCheckFileName", "NoticeCheckSpec"]) {
+      assert.ok(!sent.includes(m), `${m} should not reach the model, as the notice says`);
+    }
+  });
+
+  it("the notice text in workspace.js names exactly those categories, and no more", () => {
+    const src = readFileSync(WEB("workspace.js"), "utf8");
+    const notice = src.slice(src.indexOf("function externalAiNotice()"), src.indexOf("function evidenceStageHtml()"));
+    for (const phrase of ["the release name, user story and release scope", "acceptance-criteria text", "test titles", "defect descriptions", "business rules, text notes from TXT files", "PDF, DOCX and XLSX contents are not read"]) {
+      assert.ok(notice.includes(phrase), `notice should mention: ${phrase}`);
+    }
+    assert.doesNotMatch(notice, /residency|complian|GDPR|zero retention|UAE/i);
+  });
+});
+
 describe("web/*.js — every module parses as an ES module", () => {
   for (const f of ["format.js", "icons.js", "upload.js", "workspace.js", "components.js", "app.js"]) {
     it(`node --check ${f}`, () => {

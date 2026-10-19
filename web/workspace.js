@@ -643,9 +643,28 @@ function contextStageHtml() {
     </section>`;
 }
 
+/** Shown on the Evidence screen, before Analyze. The browser cannot tell whether this deployment has Gemini
+ * enabled, so it states both cases; the report says which mode ran. The claims about what is and is not sent were
+ * checked against api/inputNormalizer.ts (see tests/webUnits.test.mjs) and docs/STAGE2_AI_DATA_HANDLING_AUDIT.md
+ * sections 1 and 7. Keep all three in step. */
+function externalAiNotice() {
+  return `<div class="banner banner--info" role="note" data-disclosure="external-ai"><span class="ico">${ICONS.info}</span><div>
+      <b>External AI processing: what happens to this evidence</b>
+      <ul>
+        <li><b>If Gemini analysis is enabled for this deployment,</b> the evidence you submit is sent to Google's Gemini API for processing: the release name, user story and release scope, acceptance-criteria text, test titles, defect descriptions, ids, statuses, severities, criticality, area names, and which criteria each test covers. Rows from uploaded CSV and JSON files are sent once they are entered as criteria, tests or defects.</li>
+        <li><b>Not sent to the AI provider:</b> business rules, text notes from TXT files, and the names, sizes and types of uploaded files. <b>PDF, DOCX and XLSX contents are not read.</b></li>
+        <li><b>If Gemini analysis is not enabled,</b> an offline rules-based analysis runs on this application's server and no request is made to the AI provider.</li>
+        <li><b>If it is enabled and the live request fails or its response is unusable,</b> the evidence may already have been sent in that attempt. The application then falls back to the offline rules-based analysis. The report is labelled "Rules based" in that case too and cannot show that a live attempt was made.</li>
+        <li><b>Do not submit secrets, credentials, personal data or confidential production or customer evidence</b> unless the applicable data-handling requirements have been reviewed and approved. What the provider keeps or uses depends on the terms of the account behind this deployment, which this application cannot show or verify.</li>
+        <li>The release decision is made by the deterministic quality gates, not by the AI.</li>
+      </ul>
+    </div></div>`;
+}
+
 function evidenceStageHtml() {
   return `
     ${validationBlock()}
+    ${externalAiNotice()}
     <section class="card card--evidence-status" aria-labelledby="h-evs">
       <div class="card__head"><span class="ico">${ICONS.clipboard}</span><h2 id="h-evs">Evidence Provided So Far</h2></div>
       <div class="card__body" data-preview>${(lastPreviewHtml = evidenceSummaryBlock())}</div>
@@ -689,7 +708,7 @@ function evidenceStageHtml() {
       </div>
     </section>
 
-    <p class="foot-note">${ICONS.shield} Runs locally against your submitted evidence only. No application is executed and no external service is called.</p>`;
+    <p class="foot-note">${ICONS.shield} Your software is not executed or tested by this application. Where the evidence is processed depends on the analysis mode: see the external AI processing notice above.</p>`;
 }
 
 function formHtml() {
