@@ -242,10 +242,37 @@ The disclosure was checked against the code, not against this document. Where th
 - The Technical Details line said "no live model call" for every rules-based report. That was wrong after a failed attempt. It now says an offline analysis ran and that the report cannot show whether a live attempt came first.
 - The mode label named a specific model ("Gemini 3.6 Flash"). The browser does not know which model ran (`GEMINI_MODEL` can change it), so the label now says "Gemini".
 
-**Limitation found, not fixed here**
+**Limitation found (since addressed: see section 7.8)**
 - After a failed live attempt the application reruns the analysis offline. In an offline simulation using the routing guard (no client, no network), the final report's pipeline trace held only the fallback run's entries, all marked OK, and `mode` was just `rules-based`. The report therefore cannot distinguish "Gemini was not enabled" from "Gemini was tried and failed". The interface now says so instead of guessing.
 - Fixing it needs a new field in the assessment response (for example whether a live attempt was made), in `api/customAssessmentRunner.ts` and `api/_vercelShared.ts`. That is an API change outside the disclosure follow-up and needs separate approval. Until then, treat any deployment with `GEMINI_API_KEY` set as having possibly sent the evidence, whatever the report mode says.
 
 **Wording the notice deliberately avoids:** it makes no statement about data residency, legal compliance, retention, deletion, or that the provider does not use or keep the data. It says that what the provider keeps or uses depends on the account's terms, which the application cannot show or verify. An end-to-end test (`tests/e2e/dataDisclosure.spec.ts`) fails if such words appear.
 
 **Still true:** 7.5 (unresolved provider facts) and 7.6 (do not use secrets, credentials, personal data or confidential evidence with live Gemini analysis until those questions are answered and approved).
+
+### 7.8 Attempt visibility added (2026-10-19)
+
+The limitation in 7.7 is addressed. The assessment response now carries an additive `aiAttempt` field,
+`{ enabled, began, outcome, fallbackUsed }`, and the report shows it in the AI Assessment section, the Technical
+Details panel and the PDF layer.
+
+- `began` is set when the provider call is initiated. The analyze function calls a hook immediately before it starts
+  the request, after the routing guard and the key check, and the pipeline writes the fact to its state file at that
+  moment. A guard refusal or missing configuration therefore leaves `began` false, and a process killed mid-call
+  cannot lose it. If the fact cannot be recorded, the request is not started.
+- `enabled` is configuration only. `outcome` is `not-attempted`, `accepted`, `failed` (error, timeout, blocked,
+  truncated, empty or unparseable reply) or `rejected` (a reply that failed validation or grounding).
+  `fallbackUsed` is true only when the offline analysis actually supplied the findings.
+- `began` does not confirm that the provider received or processed anything, and the interface says "started", not
+  "received". Nothing in the field states or implies anything about retention, residency, compliance or deletion.
+- The field holds booleans and a fixed value only: no prompt, evidence, credential or provider error text. It never
+  feeds validation, the adapter or the gate.
+- The notice on the Evidence screen now says the report states whether a live request was started. Before
+  submission the interface still cannot know whether a deployment has Gemini enabled (see 7.3).
+- Also corrected: the fixture result was labelled "Recorded" even when Gemini had produced it, because the web
+  client compared the API mode with "live" while the API returns "gemini".
+- Tested offline only: the hook with fake clients (success, error, timeout, blocked, truncated, empty, unparseable,
+  guard refusal, missing key, recording failure), the in-process runners with injected analyzers, and the
+  child-process runners for the disabled and guard-refused cases. A child-process run in which a request really
+  begins cannot be exercised without a live call, so that path is covered by the hook, state-file and builder tests
+  together. Live provider behaviour was not tested.

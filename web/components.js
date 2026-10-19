@@ -240,7 +240,7 @@ function decisionStage(result, report, summary, cov, ctx, meta, mode, decision) 
     `<div class="cols2">${openDefectsCard(ctx)}${evidenceCard(report, cov, ctx)}</div>`,
     readinessCard(report, summary),
     findingsCard(report, ctx),
-    aiAssessmentCallout(report),
+    aiAssessmentCallout(report, result),
     `<div class="cols2">${insightsCard(report, summary, cov)}${recommendationsCard(report)}</div>`,
     decisionTraceAccordion(report, ctx, cov),
     technicalAccordion(result, report, meta, mode),
@@ -534,10 +534,32 @@ function crossCheckBanner(report) {
     </div></div>`;
 }
 
+/**
+ * What the backend recorded about a live AI request (`result.aiAttempt`, written by api/aiAttempt.ts). Display only.
+ * "Started" means the call was initiated; this application cannot confirm what the provider received. Returns null
+ * when the field is absent (an older server), so callers fall back to the generic wording.
+ */
+function aiAttemptText(a) {
+  if (!a || typeof a !== "object") return null;
+  if (!a.enabled) return { warn: false, text: "Gemini analysis was not enabled for this deployment. The offline rules-based analysis ran on this server and no request was made to the AI provider." };
+  if (!a.began) return { warn: true, text: "Gemini analysis is enabled, but no request to the AI provider was started: a configuration or routing check refused first. The offline rules-based analysis ran instead." };
+  if (a.outcome === "accepted") return { warn: false, text: "A request to the AI provider was started and its findings passed validation. This application cannot confirm what the provider received or keeps." };
+  const how = a.outcome === "rejected" ? "a reply was parsed but failed validation" : "it gave no usable reply (error, timeout, blocked or unparseable response)";
+  const after = a.fallbackUsed ? "The offline rules-based analysis then supplied the findings." : "No valid offline fallback findings were produced either.";
+  return { warn: true, text: `A request to the AI provider was started, but ${how}. ${after} The evidence may have been sent in that attempt; this application cannot confirm what the provider received or keeps.` };
+}
+
+function aiAttemptBanner(result) {
+  const t = aiAttemptText(result?.aiAttempt);
+  if (!t) return "";
+  return `<div class="banner ${t.warn ? "banner--warn" : "banner--info"}" role="note" data-ai-attempt="${esc(String(result.aiAttempt.outcome))}"><span class="ico">${t.warn ? ICONS.alert : ICONS.info}</span><div><b>${t.warn ? "Live AI request history" : "Analysis path"}.</b> ${esc(t.text)}</div></div>`;
+}
+
 /** The AI's own narrative, labelled advisory and kept apart from the gate's decision. */
-function aiAssessmentCallout(report) {
+function aiAssessmentCallout(report, result) {
   return `<section class="callout callout--ai" aria-labelledby="ai-h">
     <div class="callout__head"><span class="ico">${ICONS.sparkle}</span><h2 id="ai-h">AI Assessment</h2><span class="lane lane--ai">Advisory</span></div>
+    ${aiAttemptBanner(result)}
     ${crossCheckBanner(report)}
     <p>${report.aiQaExplanation ? formatFreeText(report.aiQaExplanation) : "No explanation was produced."}</p>
     <p class="hint">AI analysis explains the risk; it does not override the deterministic gate's decision.</p>
@@ -995,7 +1017,8 @@ function technicalAccordion(result, report, meta, mode) {
 
   const body = `<div class="tech-body">
     <dl class="kv">
-      <dt>Execution mode</dt><dd>${esc(modeLabel(mode))}${mode === "rules-based" ? `<span class="muted">. Offline rules-based analysis ran on this server. This report cannot show whether a live Gemini request was attempted first and failed; if Gemini analysis is enabled for this deployment, a failed attempt may have sent the evidence.</span>` : ""}</dd>
+      <dt>Execution mode</dt><dd>${esc(modeLabel(mode))}${mode === "rules-based" && !aiAttemptText(result?.aiAttempt) ? `<span class="muted">. Offline rules-based analysis ran on this server. This report cannot show whether a live Gemini request was attempted first and failed; if Gemini analysis is enabled for this deployment, a failed attempt may have sent the evidence.</span>` : ""}</dd>
+      ${aiAttemptText(result?.aiAttempt) ? `<dt>Live AI request</dt><dd>${esc(aiAttemptText(result.aiAttempt).text)}</dd>` : ""}
       <dt>Findings validation</dt><dd>${report.agentOutputValid === true ? badge("Passed", "b-low") : badge("Failed / n/a", "b-high")}</dd>
       <dt>Adapter status</dt><dd>${report.adapterOk === true ? badge("Passed", "b-low") : badge("Failed / n/a", "b-high")}</dd>
       <dt>Gate rule fired</dt><dd class="mono">${esc(report.firedRule || "N/A")}</dd>
@@ -1122,6 +1145,10 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
         ${(() => {
           const x = crossCheckOf(report);
           return x && !x.empty ? `<p class="pr-notice pr-notice--warn"><b>${x.confirmed.length ? "AI disagreed with the evidence." : "AI statements need checking."}</b> ${esc(x.summary)} The evidence and the gate decision are unaffected.</p>` : "";
+        })()}
+        ${(() => {
+          const t = aiAttemptText(result?.aiAttempt);
+          return t ? `<p class="${t.warn ? "pr-notice pr-notice--warn" : "pr-note"}">${esc(t.text)}</p>` : "";
         })()}
         <p class="pr-note">AI analysis explains the risk; it does not override the deterministic gate's decision.</p></section>
     </div>

@@ -669,6 +669,88 @@ describe("Evidence notice claims match what the normaliser really sends to the m
   });
 });
 
+describe("web/components.js — live AI request history (aiAttempt)", () => {
+  const A = (over = {}) => ({ enabled: true, began: true, outcome: "failed", fallbackUsed: true, ...over });
+  const view = (aiAttempt, mode = "rules-based") => reportView(sampleResult({ mode, aiAttempt }), { stage: "decision" });
+  const screenOf = (html) => html.slice(0, html.indexOf('class="print-report"'));
+  const printOf = (html) => html.slice(html.indexOf('class="print-report"'));
+  const bannerOf = (html) => (/<div class="banner [^"]*" role="note" data-ai-attempt="[^"]*">.*?<\/div><\/div>/s.exec(html) || [""])[0];
+
+  it("with no aiAttempt (an older server): no banner, and the generic caveat stays", () => {
+    const html = view(undefined);
+    assert.doesNotMatch(html, /data-ai-attempt=/);
+    assert.match(html, /cannot show whether a live Gemini request was attempted first and failed/);
+  });
+
+  it("Gemini disabled: says so and that no request was made; the generic caveat is replaced", () => {
+    const html = view({ enabled: false, began: false, outcome: "not-attempted", fallbackUsed: false });
+    assert.match(bannerOf(screenOf(html)), /banner--info.*Gemini analysis was not enabled for this deployment.*no request was made to the AI provider/s);
+    assert.doesNotMatch(html, /cannot show whether a live Gemini request was attempted/);
+    assert.match(html, /<dt>Live AI request<\/dt>/);
+  });
+
+  it("enabled but never started: says no request was started, and does not claim evidence may have been sent", () => {
+    const b = bannerOf(screenOf(view(A({ began: false, outcome: "not-attempted" }))));
+    assert.match(b, /banner--warn/);
+    assert.match(b, /no request to the AI provider was started: a configuration or routing check refused first/);
+    assert.doesNotMatch(b, /may have been sent/);
+  });
+
+  it("accepted live result: says a request was started and passed validation, without claiming what the provider received", () => {
+    const html = view(A({ outcome: "accepted", fallbackUsed: false }), "gemini");
+    const b = bannerOf(screenOf(html));
+    assert.match(b, /A request to the AI provider was started and its findings passed validation/);
+    assert.match(b, /cannot confirm what the provider received or keeps/);
+    assert.match(html, /AI analysis: Gemini</);
+  });
+
+  it("started but failed, then offline fallback: shows the attempt, the fallback, and that the evidence may have been sent", () => {
+    const html = view(A());
+    const b = bannerOf(screenOf(html));
+    assert.match(b, /banner--warn/);
+    assert.match(b, /A request to the AI provider was started, but it gave no usable reply/);
+    assert.match(b, /The offline rules-based analysis then supplied the findings/);
+    assert.match(b, /The evidence may have been sent in that attempt/);
+    assert.doesNotMatch(b, /no request was made/);
+    assert.match(printOf(html), /pr-notice pr-notice--warn">A request to the AI provider was started, but it gave no usable reply/);
+  });
+
+  it("a parsed reply that failed validation is described as rejected, not as a failed request", () => {
+    const b = bannerOf(screenOf(view(A({ outcome: "rejected" }))));
+    assert.match(b, /a reply was parsed but failed validation/);
+    assert.doesNotMatch(b, /no usable reply/);
+  });
+
+  it("when the fallback also produced nothing valid, it does not say the fallback supplied the findings", () => {
+    const b = bannerOf(screenOf(view(A({ fallbackUsed: false }))));
+    assert.match(b, /No valid offline fallback findings were produced either/);
+    assert.doesNotMatch(b, /then supplied the findings/);
+  });
+
+  it("makes no residency, compliance, retention or deletion promise in any state", () => {
+    const states = [
+      { enabled: false, began: false, outcome: "not-attempted", fallbackUsed: false },
+      A({ began: false, outcome: "not-attempted" }), A({ outcome: "accepted", fallbackUsed: false }), A(), A({ outcome: "rejected" }),
+    ];
+    for (const s of states) assert.doesNotMatch(bannerOf(screenOf(view(s))), /guarantee|complian|residen|deleted|never|secure/i);
+  });
+
+  it("escapes what it displays, and the gate decision shown does not depend on the attempt", () => {
+    const html = view(A({ outcome: '"><img src=x onerror=alert(1)>' }));
+    assert.doesNotMatch(html, /<img src=x onerror/);
+    for (const s of [undefined, A(), A({ outcome: "accepted", fallbackUsed: false }), { enabled: false, began: false, outcome: "not-attempted", fallbackUsed: false }]) {
+      assert.match(view(s), /decision-box__value">CONDITIONAL</);
+    }
+  });
+
+  it("the fixture result keeps the attempt record and maps the API mode correctly (source check of web/app.js)", () => {
+    const src = readFileSync(WEB("app.js"), "utf8");
+    assert.match(src, /mode: assess\.mode === "gemini" \? "gemini" : "recorded"/);
+    assert.match(src, /aiAttempt: assess\.aiAttempt/);
+    assert.doesNotMatch(src, /assess\.mode === "live"/);
+  });
+});
+
 describe("web/*.js — every module parses as an ES module", () => {
   for (const f of ["format.js", "icons.js", "upload.js", "workspace.js", "components.js", "app.js"]) {
     it(`node --check ${f}`, () => {

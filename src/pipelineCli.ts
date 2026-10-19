@@ -56,6 +56,8 @@ interface PipelineState {
   adapterResult?: { ok: boolean; problems?: string[]; releaseFindings?: unknown };
   gate?: { decision: string; firedRule: string; reasons: string[] };
   report?: unknown;
+  /** Set (and written to the state file) just before a provider request begins; never inferred from configuration. */
+  providerAttempt?: { began: true };
   trace: TraceEntry[];
 }
 
@@ -111,7 +113,7 @@ async function stepFetchData(
   }
 }
 
-async function stepAnalyze(state: PipelineState, analyze: AnalyzeFn): Promise<void> {
+async function stepAnalyze(state: PipelineState, analyze: AnalyzeFn, persist?: () => void): Promise<void> {
   if (!state.datasets) {
     state.trace.push({ step: "ai-reasoning", ok: false, detail: "no datasets" });
     return;
@@ -122,6 +124,17 @@ async function stepAnalyze(state: PipelineState, analyze: AnalyzeFn): Promise<vo
       analysisSteps: AGENT_ANALYSIS_STEPS,
       toolNames: MCP_TOOL_NAMES,
       datasets: state.datasets,
+      onProviderAttempt: () => {
+        // Written before the request starts, so a process killed mid-call cannot lose the fact that it began.
+        const prior = state.providerAttempt;
+        state.providerAttempt = { began: true };
+        try {
+          persist?.();
+        } catch (err) {
+          if (prior) state.providerAttempt = prior; else delete state.providerAttempt;
+          throw err; // the analyze function then does not start the request
+        }
+      },
     });
     state.trace.push({ step: "ai-reasoning", ok: true });
   } catch (err) {
@@ -260,7 +273,7 @@ export async function runPipeline(options: RunPipelineOptions = {}): Promise<Rel
 
   const state = emptyState(options.scenario);
   await stepFetchData(state, fetchDatasets);
-  await stepAnalyze(state, analyze);
+  await stepAnalyze(state, analyze, () => writeState(stateFile, state));
   stepValidate(state);
   stepAdapt(state);
   stepGate(state);
@@ -303,7 +316,7 @@ export async function main(argv: string[]): Promise<void> {
       await stepFetchData(state, fetchDatasetsViaMcp);
       break;
     case "analyze":
-      await stepAnalyze(state, resolveAnalyze());
+      await stepAnalyze(state, resolveAnalyze(), () => writeState(stateFile, state));
       break;
     case "validate":
       stepValidate(state);

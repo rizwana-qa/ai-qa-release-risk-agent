@@ -264,8 +264,11 @@ rows. If the key is unset, or a Gemini call fails to produce valid, gate-ready
 findings, the app **safely falls back** to an offline rules-based analyzer
 (`api/evidenceAnalyzer.ts`) that restates and explains the submitted evidence —
 it invents nothing and makes no decision. Technical Details honestly reports
-which one actually ran: `AI analysis: Gemini 3.6 Flash` or `QA analysis mode:
-Rules based`. The `REQ-BEN-001` scenario remains available under the header
+which one actually ran: `AI analysis: Gemini` or `QA analysis mode: Rules based`.
+The report's AI Assessment section also states whether a live request was
+started before any fallback (the `aiAttempt` field of the API response), so a
+rules-based report after a failed live attempt is not mistaken for one where
+nothing was sent. The `REQ-BEN-001` scenario remains available under the header
 **Demo / Regression fixture** menu, with the same Gemini-or-rules-based
 behavior. `evaluateReleaseGate()` is still the sole owner of the decision.
 See [`web/`](web/) and [`api/`](api/).

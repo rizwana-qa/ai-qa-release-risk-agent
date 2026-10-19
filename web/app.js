@@ -513,7 +513,10 @@ function demoResult(assess, s) {
     context,
     provenance: assess.report?.dataProvenance || {},
     supportingDocuments: [],
-    mode: assess.mode === "live" ? "live" : "recorded",
+    // The API reports "gemini" or "recorded"; the old comparison with "live" never matched, so a fixture run that
+    // really used Gemini was labelled "Recorded".
+    mode: assess.mode === "gemini" ? "gemini" : "recorded",
+    aiAttempt: assess.aiAttempt,
     meta: {
       pipelineStages: (assess.meta?.stages || []).map((x) => x.label),
       evaluationOrder: assess.meta?.evaluationOrder || [],

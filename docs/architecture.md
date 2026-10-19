@@ -338,8 +338,22 @@ already consumes and runs the **unchanged** six steps.
   to produce valid, gate-ready findings, the runner silently redoes just that
   small batch of steps against the rules-based findings from
   `evidenceAnalyzer.ts` instead, before reporting any stage to the UI. The report
-  is always labelled honestly (`Execution mode: AI analysis: Gemini 3.6 Flash` or
+  is always labelled honestly (`Execution mode: AI analysis: Gemini` or
   `QA analysis mode: Rules based`) — never a false "live AI" claim.
+- The final trace cannot show the failed live attempt: the report assembly keeps
+  one entry per step, and the in-process path starts each run from a fresh state.
+  So the pipeline records the attempt separately. A provider-backed analyze
+  function calls the optional `AgentContext.onProviderAttempt` hook immediately
+  before it starts a request (after the routing guard and key check, never
+  before); `stepAnalyze` sets `providerAttempt` in the pipeline state and writes
+  the state file at that moment. After the batches, the runners combine that
+  fact with the live batch outcome in `api/aiAttempt.ts` and return an additive
+  `aiAttempt` field `{ enabled, began, outcome, fallbackUsed }`
+  (`outcome`: `not-attempted`, `accepted`, `failed` or `rejected`). `began` means
+  the call was initiated, not that the provider received it; `enabled` is
+  configuration only. The field is reporting only and is never an input to
+  validation, the adapter or the gate. The in-process runners accept an optional
+  `deps.createLiveAnalyze` for tests; no request or command line can reach it.
 - `api/customAssessmentRunner.ts` writes a pre-populated pipeline state plus the
   rules-based findings file, runs `analyze → validate → adapt → gate → assemble`
   as child processes, streams one SSE event per real stage, and deletes both temp

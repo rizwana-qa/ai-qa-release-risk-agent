@@ -27,6 +27,7 @@ import { randomUUID } from "node:crypto";
 import { normalizeAssessmentInput, type RawAssessmentPayload } from "./inputNormalizer.ts";
 import { analyzeEvidence } from "./evidenceAnalyzer.ts";
 import { computeSummary } from "./pipelineRunner.ts";
+import { buildAiAttempt, attemptBegan, type AiAttempt } from "./aiAttempt.ts";
 import { EVALUATION_ORDER } from "../src/releaseGate.ts";
 import { MCP_TOOL_NAMES } from "../src/agentContract.ts";
 
@@ -58,6 +59,8 @@ export interface CustomAssessmentResult {
   provenance: unknown;
   supportingDocuments: unknown;
   mode: "gemini" | "rules-based";
+  /** Whether a live AI request began before any fallback (api/aiAttempt.ts). Additive; absent from older servers. */
+  aiAttempt?: AiAttempt;
   meta: { pipelineStages: string[]; evaluationOrder: readonly string[]; mcpTools: readonly string[] };
 }
 
@@ -174,6 +177,13 @@ export async function runCustomAssessment(
       traceOk(s, "validate-structured-findings") !== false &&
       traceOk(s, "deterministic-adapter") !== false;
 
+    // Facts about the live batch, taken before any fallback overwrites them. `began` comes from the state file,
+    // where the pipeline wrote it just before the provider request started, never from the key being present.
+    const liveBatchOk = hasKey && ok;
+    const liveAiReasoningOk = traceOk(s, "ai-reasoning");
+    const liveAttemptBegan = attemptBegan(s);
+    let fallbackSupplied = false;
+
     if (hasKey && !ok) {
       mode = "rules-based";
       env = rulesEnv;
@@ -188,7 +198,11 @@ export async function runCustomAssessment(
         traceOk(s, "ai-reasoning") !== false &&
         traceOk(s, "validate-structured-findings") !== false &&
         traceOk(s, "deterministic-adapter") !== false;
+      fallbackSupplied = ok;
     }
+    const aiAttempt = buildAiAttempt({
+      enabled: hasKey, began: liveAttemptBegan, liveBatchOk, aiReasoningOk: liveAiReasoningOk, fallbackSupplied,
+    });
     emit(2, traceOk(s, "ai-reasoning") === false ? "failed" : "done");
     emit(3, "running");
     const validateOrAdaptBad = traceOk(s, "validate-structured-findings") === false || traceOk(s, "deterministic-adapter") === false;
@@ -216,6 +230,7 @@ export async function runCustomAssessment(
         provenance: norm.provenance,
         supportingDocuments: norm.context.supportingDocuments,
         mode,
+        aiAttempt,
         meta: {
           pipelineStages: CUSTOM_STAGES.map((s) => s.label),
           evaluationOrder: EVALUATION_ORDER,

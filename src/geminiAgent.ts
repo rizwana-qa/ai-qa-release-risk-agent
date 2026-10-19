@@ -200,6 +200,9 @@ export function createGeminiAnalyzeFn(
       assertDeveloperApiRouting();
       client = new GoogleGenAI({ apiKey: requireGeminiApiKey(), vertexai: false });
     }
+    // Record that an attempt is about to begin. Reached only after the routing guard, the key check and client
+    // creation have passed. If recording fails this throws and no request is started.
+    context.onProviderAttempt?.();
     const controller = new AbortController();
     const response = await raceWithTimeout(
       client.models.generateContent({

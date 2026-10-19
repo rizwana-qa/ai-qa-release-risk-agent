@@ -23,7 +23,8 @@ test("Evidence screen: the notice states what is sent, what is not, both modes, 
   await expect(notice).toContainText("PDF, DOCX and XLSX contents are not read");
   await expect(notice).toContainText("If Gemini analysis is not enabled, an offline rules-based analysis runs on this application's server and no request is made to the AI provider");
   await expect(notice).toContainText("the evidence may already have been sent in that attempt");
-  await expect(notice).toContainText("cannot show that a live attempt was made");
+  await expect(notice).toContainText("Starting a request does not confirm that the provider received it");
+  await expect(notice).toContainText("states that a live request was started and did not give usable findings");
   await expect(notice).toContainText("Do not submit secrets, credentials, personal data or confidential production or customer evidence");
   await expect(notice).toContainText("which this application cannot show or verify");
   await expect(notice).toContainText("not by the AI");

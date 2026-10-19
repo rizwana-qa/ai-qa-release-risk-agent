@@ -30,6 +30,8 @@ import { MCP_TOOL_NAMES } from "../src/agentContract.ts";
 import { normalizeAssessmentInput, type RawAssessmentPayload } from "./inputNormalizer.ts";
 import { analyzeEvidence } from "./evidenceAnalyzer.ts";
 import { getMeta, computeSummary, type AssessmentResult, type AssessmentSummary } from "./pipelineRunner.ts";
+import { buildAiAttempt, attemptBegan, type AiAttempt } from "./aiAttempt.ts";
+import type { AnalyzeFn } from "../src/agentContract.ts";
 
 const SAMPLE_FINDINGS_FILE = fileURLToPath(
   new URL("../workflows/sample-agent-findings.json", import.meta.url),
@@ -86,6 +88,20 @@ function batchFailed(trace: ReleaseReport["pipelineTrace"]): boolean {
   return trace.some((t) => FAILURE_STEPS.includes(t.step) && t.ok === false);
 }
 
+/** The ai-reasoning result of a trace, or undefined if it left no entry. */
+function aiReasoningOk(trace: ReleaseReport["pipelineTrace"]): boolean | undefined {
+  const e = [...trace].reverse().find((t) => t.step === "ai-reasoning");
+  return e ? e.ok !== false : undefined;
+}
+
+/**
+ * Test seam: lets a test supply the "live" analyze function instead of the real Gemini one. Production handlers
+ * never pass it, and nothing in a request or on a command line can reach it.
+ */
+export interface InProcessDeps {
+  createLiveAnalyze?: () => AnalyzeFn;
+}
+
 function readInternalState(stateFile: string): unknown {
   try {
     return JSON.parse(readFileSync(stateFile, "utf8"));
@@ -104,25 +120,36 @@ function scratchStateFile(prefix: string): string {
  * present, silently fall back to the recorded findings fixture if the
  * analyze/validate/adapt batch didn't succeed.
  */
-export async function runFixtureAssessmentInProcess(): Promise<AssessmentResult> {
+export async function runFixtureAssessmentInProcess(deps: InProcessDeps = {}): Promise<AssessmentResult> {
   const hasKey = Boolean(process.env.GEMINI_API_KEY);
   let mode: "gemini" | "recorded" = hasKey ? "gemini" : "recorded";
   const stateFile = scratchStateFile("vercel-fixture");
 
   const recordedAnalyze = async () => JSON.parse(readFileSync(SAMPLE_FINDINGS_FILE, "utf8")) as unknown;
-  const liveAnalyze = hasKey ? createGeminiAnalyzeFn() : recordedAnalyze;
+  const liveAnalyze = hasKey ? (deps.createLiveAnalyze ?? createGeminiAnalyzeFn)() : recordedAnalyze;
 
   try {
     let report = await runPipeline({ stateFile, analyze: liveAnalyze });
     let state = readInternalState(stateFile);
 
+    // Taken from the first run's state before a fallback run replaces it: the second runPipeline starts from a
+    // fresh state, so without this the attempt would be forgotten.
+    const liveBatchOk = hasKey && !batchFailed(report.pipelineTrace);
+    const liveAiReasoningOk = aiReasoningOk(report.pipelineTrace);
+    const liveAttemptBegan = attemptBegan(state);
+    let fallbackSupplied = false;
+
     if (hasKey && batchFailed(report.pipelineTrace)) {
       mode = "recorded";
       report = await runPipeline({ stateFile, analyze: recordedAnalyze });
       state = readInternalState(stateFile);
+      fallbackSupplied = !batchFailed(report.pipelineTrace);
     }
 
-    return { report, summary: computeSummary(state), mode, meta: getMeta() };
+    const aiAttempt = buildAiAttempt({
+      enabled: hasKey, began: liveAttemptBegan, liveBatchOk, aiReasoningOk: liveAiReasoningOk, fallbackSupplied,
+    });
+    return { report, summary: computeSummary(state), mode, aiAttempt, meta: getMeta() };
   } finally {
     try { rmSync(stateFile, { force: true }); } catch { /* ignore */ }
   }
@@ -136,6 +163,8 @@ export interface CustomAssessmentResultShape {
   provenance: unknown;
   supportingDocuments: unknown;
   mode: "gemini" | "rules-based";
+  /** Whether a live AI request began before any fallback (api/aiAttempt.ts). Additive; absent from older servers. */
+  aiAttempt?: AiAttempt;
   meta: { pipelineStages: string[]; evaluationOrder: readonly string[]; mcpTools: readonly string[] };
 }
 
@@ -161,6 +190,7 @@ const CUSTOM_STAGE_LABELS = [
  */
 export async function runCustomAssessmentInProcess(
   payload: RawAssessmentPayload,
+  deps: InProcessDeps = {},
 ): Promise<CustomAssessmentOutcome> {
   const norm = normalizeAssessmentInput(payload);
   if (!norm.ok) return { ok: false, status: 422, missing: norm.missing, problems: norm.problems };
@@ -173,18 +203,29 @@ export async function runCustomAssessmentInProcess(
   const hasKey = Boolean(process.env.GEMINI_API_KEY);
   let mode: "gemini" | "rules-based" = hasKey ? "gemini" : "rules-based";
   const rulesAnalyze = async () => findings as unknown;
-  const liveAnalyze = hasKey ? createGeminiAnalyzeFn() : rulesAnalyze;
+  const liveAnalyze = hasKey ? (deps.createLiveAnalyze ?? createGeminiAnalyzeFn)() : rulesAnalyze;
   const fetchDatasets = async () => norm.datasets;
 
   try {
     let report = await runPipeline({ stateFile, scenario: requirementId, fetchDatasets, analyze: liveAnalyze });
     let state = readInternalState(stateFile);
 
+    // Taken from the first run's state before a fallback run replaces it (the second runPipeline starts fresh).
+    const liveBatchOk = hasKey && !batchFailed(report.pipelineTrace);
+    const liveAiReasoningOk = aiReasoningOk(report.pipelineTrace);
+    const liveAttemptBegan = attemptBegan(state);
+    let fallbackSupplied = false;
+
     if (hasKey && batchFailed(report.pipelineTrace)) {
       mode = "rules-based";
       report = await runPipeline({ stateFile, scenario: requirementId, fetchDatasets, analyze: rulesAnalyze });
       state = readInternalState(stateFile);
+      fallbackSupplied = !batchFailed(report.pipelineTrace);
     }
+
+    const aiAttempt = buildAiAttempt({
+      enabled: hasKey, began: liveAttemptBegan, liveBatchOk, aiReasoningOk: liveAiReasoningOk, fallbackSupplied,
+    });
 
     return {
       ok: true,
@@ -196,6 +237,7 @@ export async function runCustomAssessmentInProcess(
         provenance: norm.provenance,
         supportingDocuments: norm.context.supportingDocuments,
         mode,
+        aiAttempt,
         meta: { pipelineStages: CUSTOM_STAGE_LABELS, evaluationOrder: EVALUATION_ORDER, mcpTools: MCP_TOOL_NAMES },
       },
     };

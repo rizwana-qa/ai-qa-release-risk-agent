@@ -150,6 +150,14 @@ export interface AgentContext {
   analysisSteps: readonly string[];
   toolNames: readonly string[];
   /**
+   * Called by a provider-backed analyze function immediately before it starts a request to the provider, and
+   * never before a configuration or routing check has passed. It lets the pipeline record that an attempt BEGAN,
+   * even if the call later fails, times out or is rejected. If it throws, the analyze function must not start
+   * the request. Offline analyze functions never call it. It says nothing about whether the provider received
+   * anything.
+   */
+  onProviderAttempt?: () => void;
+  /**
    * The four synthetic datasets, already retrieved via MCP by the pipeline
    * before analyze() is called. The production LLM agent (Gemini) is sent
    * this copy directly — no separate tool-calling loop, since there is

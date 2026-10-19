@@ -26,6 +26,7 @@ import {
   type ReleaseFindings,
 } from "../src/releaseGate.ts";
 import { MCP_TOOL_NAMES } from "../src/agentContract.ts";
+import { buildAiAttempt, stateFileAttemptBegan, type AiAttempt } from "./aiAttempt.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SAMPLE_FINDINGS = "workflows/sample-agent-findings.json";
@@ -67,6 +68,8 @@ export interface AssessmentResult {
   report: unknown | null;
   summary: AssessmentSummary | null;
   mode: "gemini" | "recorded";
+  /** Whether a live AI request began before any fallback (api/aiAttempt.ts). Additive; absent from older servers. */
+  aiAttempt?: AiAttempt;
   meta: AssessmentMeta;
 }
 
@@ -214,12 +217,20 @@ export async function runAssessment(opts: RunAssessmentOptions = {}): Promise<As
     traceEntry(t, "validate-structured-findings")?.ok !== false &&
     traceEntry(t, "deterministic-adapter")?.ok !== false;
 
+  // Facts about the live batch, taken before any fallback. `began` is read from the state file, where the pipeline
+  // wrote it just before the provider request started; it is never inferred from the key being present.
+  const liveBatchOk = hasKey && batchOk(trace, codes);
+  const liveAiReasoningOk = traceEntry(trace, "ai-reasoning")?.ok;
+  const liveAttemptBegan = stateFileAttemptBegan(stateFile);
+  let fallbackSupplied = false;
+
   if (hasKey && !batchOk(trace, codes)) {
     mode = "recorded";
     env = recordedEnv;
     codes = [];
     for (const i of [1, 2, 3]) codes.push(await runStep(PIPELINE_STAGES[i]!.cli, stateFile, env));
     trace = readTrace(stateFile);
+    fallbackSupplied = batchOk(trace, codes);
   }
   for (const i of [1, 2, 3]) {
     const stage = PIPELINE_STAGES[i]!;
@@ -249,5 +260,8 @@ export async function runAssessment(opts: RunAssessmentOptions = {}): Promise<As
     /* ignore */
   }
 
-  return { report, summary, mode, meta: getMeta() };
+  const aiAttempt = buildAiAttempt({
+    enabled: hasKey, began: liveAttemptBegan, liveBatchOk, aiReasoningOk: liveAiReasoningOk, fallbackSupplied,
+  });
+  return { report, summary, mode, aiAttempt, meta: getMeta() };
 }

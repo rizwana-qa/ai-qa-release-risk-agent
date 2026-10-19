@@ -56,10 +56,17 @@ Then open **http://localhost:8080**.
    the release decision. The decision is also shown in the header on every screen
    once a report exists.
 
-Custom assessments run in **rules-based mode** (offline analysis of your
-submitted evidence; no live model call), reported honestly in Technical Details
-as `Execution mode: Rules based`. The **Demo / Regression fixture** menu runs the
-built-in `REQ-BEN-001` scenario through the recorded/live path.
+Custom assessments use live Gemini analysis when the deployment has a key
+configured, and otherwise run in **rules-based mode** (offline analysis of your
+submitted evidence; no request to the AI provider). The mode that produced the
+findings is reported in Technical Details (`Execution mode: Rules based` or
+`AI analysis: Gemini`). The report also shows the response's `aiAttempt` record:
+whether a live request was started at all, and whether the offline fallback then
+supplied the findings, so a rules-based report is never read as "no evidence was
+sent". "Started" means the call was initiated; the app cannot confirm what the
+provider received. A response without `aiAttempt` (an older server) falls back to
+a generic caveat. The **Demo / Regression fixture** menu runs the built-in
+`REQ-BEN-001` scenario through the recorded/live path.
 
 ## Product boundary
 
