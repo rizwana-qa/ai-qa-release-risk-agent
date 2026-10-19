@@ -513,3 +513,18 @@ git add -- api/evidenceAnalyzer.ts api/inputNormalizer.ts api/policy.ts src/agen
 8. A live-day preflight on a clean environment (no routing variables), run by the owner.
 
 No provider request was made and no live evaluation was executed during this audit.
+
+### 20.12 Baseline digest history (added 2026-10-20)
+
+Sections 20.1 and 20.10 are historical records and are left as written. This subsection records the digest after the `aiAttempt` change and says which value is which. Where the sections differ about which digest is current, this one applies.
+
+| Commit | What it is | Digest (SHA-256 over the 16 files in `BASELINE_FILES`) | Status |
+| --- | --- | --- | --- |
+| `7ca9224` (and `5a4cc50`, which changes none of the 16 files) | Stage 3B baseline commit | `2a45ca17b006b6c71fd3ac282e013206cfc909841d7ca0fcda17686284a30a4d` | The value recorded in 20.1 and in dry-run records made at those commits. Historical; not replaced. |
+| `c040fb0` | `aiAttempt`: records whether a live AI request began before an offline fallback | `b7b5dd5fcd1e75bdb0c37a05ef4f6034063e5671db48b68b29f692209517752a` | **Candidate.** Not approved for live evaluation. |
+
+- **Same file set.** The candidate digest covers the same 16 files. It differs because three of them changed: `src/agentContract.ts`, `src/geminiAgent.ts` and `src/pipelineCli.ts`. The other 13 digested files are byte-identical between the two commits (checked with `git diff --name-only 5a4cc50 c040fb0` over those paths).
+- **Scenario fingerprint unchanged:** `4cafeed74581c8e925c910f54b767db9a5c2b120b268668d39fc1cb3b30ae01c`. No scenario, expected decision or threshold changed.
+- **How it was verified.** Both digests were recomputed from the committed content at each commit by a separate implementation of the documented algorithm (path, content with CRLF normalised to LF, in `BASELINE_FILES` order), and the candidate also matches the runner's own `baselineDigest()` on the working tree. The runner's offline dry-run record at `c040fb0` shows the same value.
+- **What it does and does not show.** It identifies the content of those 16 files. It does not show that the content is safe, correct or approved. This plan, the tests and the other files listed in 20.10 are not covered, so documentation-only commits do not change it.
+- **Not approved.** Recording the candidate digest does not approve it. Live evaluation still needs the owner approvals, provider facts and other blockers in 20.11, including the owner's decision to freeze this digest. A live result must quote the digest in its own run record and be accepted only if that record's `analyzerSource` is `default-gemini`, its fingerprint matches, and its digest is the one the owner froze.
