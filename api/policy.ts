@@ -26,11 +26,11 @@ export const LIMITS = {
   fileBytes: 25 * 1024 * 1024,
 } as const;
 
-const HIGH_RISK_AREA = /(secur|auth|authz|access.?control|privac|complian|gdpr|hipaa|pci|payment|billing|credential|encrypt|pii|token|session|permission|identity)/i;
+export const HIGH_RISK_AREA_PATTERN = /(secur|auth|authz|access.?control|privac|complian|gdpr|hipaa|pci|payment|billing|credential|encrypt|pii|token|session|permission|identity)/i;
 
 /** Classify a normalized area slug as high or medium inherent risk. */
 export function classifyAreaRisk(area: string): AreaRisk {
-  return HIGH_RISK_AREA.test(area) ? "high" : "medium";
+  return HIGH_RISK_AREA_PATTERN.test(area) ? "high" : "medium";
 }
 
 /** Normalize a free-text area name to a stable slug. */

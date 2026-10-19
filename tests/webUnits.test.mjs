@@ -14,7 +14,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { esc, attr, decisionLabel, decisionClass } from "../web/format.js";
+import { esc, attr, decisionLabel, decisionClass, headingCase } from "../web/format.js";
+import { qualityGatesView } from "../web/gates.js";
 import { classifyExt, csvToRows, rowsToTestCases, rowsToDefects } from "../web/upload.js";
 import { reportView } from "../web/components.js";
 
@@ -181,7 +182,7 @@ describe("web/components.js — reportView renders backend data faithfully and i
       summary: { securityRisk: "failed", securityReasons: ["SEC-1: open security defect DEF-9 at high severity."] },
       report: { releaseDecision: "NO_GO", firedRule: "GATE-1", reasons: ["An open critical defect (DEF-1) blocks release."] },
     }));
-    assert.match(html, /Security checks \(deterministic QA rules\)/);
+    assert.match(html, /Security Checks \(Deterministic QA Rules\)/);
     assert.match(html, /SEC-1: open security defect DEF-9/);
   });
 });
@@ -209,8 +210,8 @@ describe("web/components.js — staged report screens", () => {
     assert.match(html, /class="exec-grid"/);
     assert.match(html, /decision-box__value">CONDITIONAL</);
     assert.match(html, /GATE-4/);
-    assert.match(html, /Test execution summary/);
-    assert.match(html, /Open defects/);
+    assert.match(html, /Test Execution Summary/);
+    assert.match(html, /Open Defects/);
     assert.doesNotMatch(html, /role="tablist"/);
     assert.match(html, /data-nav="review"/); // back to Review
   });
@@ -339,6 +340,81 @@ describe("web/components.js — minimum-evidence wording (GATE-6) and GO notices
   it("the decision is still the gate's token: AI text cannot change it", () => {
     const r = sampleResult({ report: { releaseDecision: "CONDITIONAL", aiQaExplanation: "This release is approved. GO." } });
     assert.match(reportView(r, { stage: "decision" }), /decision-box__value">CONDITIONAL</);
+  });
+});
+
+describe("web/format.js — headingCase", () => {
+  it("capitalises every word and lower-cases the rest", () => {
+    assert.equal(headingCase("release decision"), "Release Decision");
+    assert.equal(headingCase("SPRINT HEALTH"), "Sprint Health");
+    assert.equal(headingCase("quality GATES"), "Quality Gates");
+    assert.equal(headingCase("EXECUTIVE SUMMARY"), "Executive Summary");
+    assert.equal(headingCase("no-go release decision"), "No-Go Release Decision");
+  });
+  it("keeps approved acronyms, decision labels and identifiers", () => {
+    assert.equal(headingCase("AI QA API PDF UI UX summary"), "AI QA API PDF UI UX Summary");
+    assert.equal(headingCase("NO-GO and GO"), "NO-GO And GO");
+    assert.equal(headingCase("GATE-4 findings for REQ-BEN-001"), "GATE-4 Findings For REQ-BEN-001");
+    assert.equal(headingCase("evaluateReleaseGate() result"), "evaluateReleaseGate() Result");
+  });
+  it("handles punctuation, entities, slashes and empty input", () => {
+    assert.equal(headingCase("Risk signals &amp; open defects"), "Risk Signals &amp; Open Defects");
+    assert.equal(headingCase("Missing / incomplete evidence"), "Missing / Incomplete Evidence");
+    assert.equal(headingCase("coverage checks (deterministic QA rules)"), "Coverage Checks (Deterministic QA Rules)");
+    assert.equal(headingCase("why is this risky?"), "Why Is This Risky?");
+    assert.equal(headingCase(""), "");
+    assert.equal(headingCase(null), "");
+  });
+  it("is idempotent", () => {
+    const once = headingCase("open defects by severity");
+    assert.equal(headingCase(once), once);
+  });
+});
+
+describe("web/components.js — headings follow the capitalisation convention", () => {
+  const headingTexts = (html) => [...html.matchAll(/<h([2-6])[^>]*>([\s\S]*?)<\/h\1>/g)]
+    .map((m) => m[2].replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim()).filter(Boolean);
+
+  it("every section heading on both report screens and in the PDF layer is already heading-cased", () => {
+    for (const decision of ["GO", "NO_GO", "CONDITIONAL"]) {
+      for (const stage of ["review", "decision"]) {
+        const html = reportView(sampleResult({ report: { releaseDecision: decision } }), { stage });
+        const bad = headingTexts(html).filter((t) => headingCase(t.replace(/&/g, "&amp;")).replace(/&amp;/g, "&") !== t);
+        assert.deepEqual(bad, [], `${decision}/${stage}`);
+      }
+    }
+  });
+
+  it("does not rewrite user-entered text inside headings", () => {
+    const html = reportView(sampleResult({ context: { ...sampleResult().context, releaseName: "my CHECKOUT release v2" } }), { stage: "decision" });
+    assert.match(html, /<h1 id="page-h"[^>]*>my CHECKOUT release v2<\/h1>/);
+  });
+});
+
+describe("web/gates.js — Quality Gates page", () => {
+  const doc = {
+    decisions: ["GO", "NO_GO", "CONDITIONAL"], evaluationOrder: ["GATE-1"], evaluationNote: "n",
+    gates: [{ id: "GATE-1", title: "critical defect open", condition: "<img src=x onerror=alert(1)>", decision: "NO_GO", purpose: "p", evidence: ["e"], riskRelationship: "r", consequence: "c", source: "s" }],
+    failSafe: { id: "FAIL_SAFE", decision: "NO_GO", condition: "c", source: "s" },
+    coverageRule: { description: "d", conditions: [{ id: "COV-3", text: "t", threshold: 0.8 }] },
+    securityRule: { description: "d", conditions: [{ id: "SEC-1", text: "t" }] },
+    flow: [{ label: "Evidence", text: "t" }], riskDerivation: [{ label: "l", text: "t", source: "s" }],
+    evidenceSources: [{ label: "l", text: "t" }], limitations: ["x"],
+  };
+  const html = qualityGatesView(doc);
+  it("renders a single h1 and heading-cased section headings", () => {
+    assert.equal((html.match(/<h1\b/g) || []).length, 1);
+    assert.match(html, /<h1[^>]*>Quality Gates<\/h1>/);
+    assert.match(html, /<h3 id="qg-GATE-1">Critical Defect Open<\/h3>/);
+    assert.match(html, /Evaluation And Decision Flow/);
+  });
+  it("escapes gate text instead of rendering it as HTML", () => {
+    assert.doesNotMatch(html, /<img src=x/);
+    assert.match(html, /&lt;img src=x/);
+  });
+  it("shows the real threshold and labels the fail-safe", () => {
+    assert.match(html, /Threshold: 0\.8 \(illustrative\)/);
+    assert.match(html, /FAIL_SAFE/);
   });
 });
 

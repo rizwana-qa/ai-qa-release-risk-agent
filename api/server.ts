@@ -15,6 +15,7 @@ import { join } from "node:path";
 
 import { SCENARIOS, getScenario } from "./scenarioData.ts";
 import { runAssessment, getMeta } from "./pipelineRunner.ts";
+import { getQualityGates } from "./qualityGates.ts";
 import { normalizeAssessmentInput } from "./inputNormalizer.ts";
 import { runCustomAssessment } from "./customAssessmentRunner.ts";
 import * as runRegistry from "./runRegistry.ts";
@@ -40,6 +41,7 @@ const STATIC_FILES: Record<string, string> = {
   "/upload.js": "upload.js",
   "/format.js": "format.js",
   "/icons.js": "icons.js",
+  "/gates.js": "gates.js",
 };
 
 const MIME: Record<string, string> = {
@@ -111,6 +113,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (path === "/api/scenarios") return sendJson(res, 200, SCENARIOS);
 
   if (path === "/api/meta") return sendJson(res, 200, getMeta());
+
+  if (path === "/api/quality-gates") return sendJson(res, 200, getQualityGates());
 
   if (path === "/api/scenario") {
     const scenario = getScenario(url.searchParams.get("id") ?? "");

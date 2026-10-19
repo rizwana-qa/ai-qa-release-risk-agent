@@ -9,6 +9,7 @@ helpers in `format.js`; nothing from user input or an uploaded file is ever
 executed, `eval`'d, or written to the DOM unescaped.
 
 - `index.html` — page shell (header with the decision chip and Demo / Regression menu, five-stage stepper, footer)
+- `gates.js` — the read-only Quality Gates reference page (rendered from `/api/quality-gates`, opened from the header menu or `#/quality-gates`)
 - `styles.css` — enterprise light design system (navy / blue tokens, status colours with text-safe ink variants, responsive down to 320px, and the unchanged print / PDF layer); no external assets or remote fonts
 - `icons.js` — inline SVG icon set
 - `format.js` — display helpers (HTML/attribute escaping, label casing, decision

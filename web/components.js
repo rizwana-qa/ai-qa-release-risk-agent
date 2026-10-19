@@ -6,7 +6,7 @@
 
 import { ICONS } from "./icons.js";
 import {
-  esc, humanizeArea, displayArea, formatFreeText, upper, decisionLabel, decisionClass,
+  esc, headingCase, humanizeArea, displayArea, formatFreeText, upper, decisionLabel, decisionClass,
   severityClass, priorityClass, coverageClass, testStatusClass, groupScenarios, formatTraceDetail,
 } from "./format.js";
 
@@ -35,7 +35,7 @@ function accordion(id, { icon, title, meta = "", open = false, ai = false }, bod
   return `<section class="acc${open ? " open" : ""}${ai ? " card--ai" : ""}" data-acc="${esc(id)}">
     <button class="acc__head" type="button" aria-expanded="${open ? "true" : "false"}" aria-controls="acc-body-${esc(id)}">
       <span class="ico">${icon}</span>
-      <h3>${esc(title)}</h3>
+      <h3>${esc(headingCase(title))}</h3>
       <span class="acc__meta">${meta}<span class="chev">${ICONS.chevron}</span></span>
     </button>
     <div class="acc__body" id="acc-body-${esc(id)}">${bodyHtml}</div>
@@ -57,7 +57,7 @@ function actionBar(hint, buttons) {
 
 function pageHead(stageNo, title, sub) {
   return `<div class="pagehead">
-    <div><span class="eyebrow">Stage ${stageNo} of 5</span><h1 id="page-h" tabindex="-1">${esc(title)}</h1>${sub ? `<p>${esc(sub)}</p>` : ""}</div>
+    <div><span class="eyebrow">Stage ${stageNo} of 5</span><h1 id="page-h" tabindex="-1">${esc(headingCase(title))}</h1>${sub ? `<p>${esc(sub)}</p>` : ""}</div>
   </div>`;
 }
 
@@ -108,7 +108,7 @@ export function processingView(stages, { failed = false } = {}) {
   return `${pageHead(3, "Analyze release risk", "The pipeline normalises your input, runs the QA analysis, then evaluates the deterministic release gate.")}
   <div class="proc">
     <section class="card" aria-labelledby="proc-h">
-      <div class="card__head"><span class="ico">${ICONS.cpu}</span><h2 id="proc-h">Analyzing release risk</h2></div>
+      <div class="card__head"><span class="ico">${ICONS.cpu}</span><h2 id="proc-h">Analyzing Release Risk</h2></div>
       <div class="card__body">
         <div class="stepper">${steps}</div>
         ${foot}
@@ -178,7 +178,7 @@ export function reportView(result, { stage, tab = "risk" } = {}) {
   const assessmentName = esc(ctx.releaseName || ctx.userStory || report.scenario || "Release assessment");
   const description = ctx.releaseScope || ctx.userStory || "";
   const stageNo = stage === "review" ? 4 : 5;
-  const stageTitle = stage === "review" ? "Review findings & risk signals" : "Release decision";
+  const stageTitle = headingCase(stage === "review" ? "Review findings & risk signals" : "Release decision");
 
   const head = `<header class="report__head">
       <div class="report__ident">
@@ -261,7 +261,7 @@ function decisionHero(report, summary, cov, decision) {
     : decision === "CONDITIONAL" ? ICONS.alert : ICONS.help;
   return `<section class="exec-grid" aria-label="Release decision">
     <div class="decision-box ${decisionClass(decision)}" role="group" aria-label="Release decision">
-      <span class="decision-box__label">Release decision</span>
+      <span class="decision-box__label">Release Decision</span>
       <div class="decision-box__row">
         <span class="decision-box__ring" aria-hidden="true">${ringIcon}</span>
         <span class="decision-box__value">${esc(decisionLabel(decision))}</span>
@@ -316,7 +316,7 @@ function rationalePanel(report, decision, summary) {
   const gateStep = [...trace].reverse().find((t) => /gate/.test(t.step || ""));
 
   return `<div class="rationale">
-    <div class="rationale__head"><span class="ico">${ICONS.scale}</span><div><span class="eyebrow" style="margin:0">Executive summary</span><h3>${esc(heading)}</h3></div></div>
+    <div class="rationale__head"><span class="ico">${ICONS.scale}</span><div><span class="eyebrow" style="margin:0">Executive Summary</span><h3>${esc(headingCase(heading))}</h3></div></div>
     <p class="rationale__lead">${esc(lead)}</p>
     ${(() => {
       const note = goEvidenceNote(decision, summary);
@@ -326,7 +326,7 @@ function rationalePanel(report, decision, summary) {
         : `<p class="rationale__note">${esc(note.text)}</p>`;
     })()}
     <div>
-      <span class="eyebrow">${ruleIds.length > 1 ? "Applied gate rules" : "Applied gate rule"}</span>
+      <span class="eyebrow">${ruleIds.length > 1 ? "Applied Gate Rules" : "Applied Gate Rule"}</span>
       ${ruleIds.length
         ? `<div class="chips">${ruleIds.map((id) => `<span class="badge b-neutral mono">${esc(id)}</span>`).join("")}</div>`
         : `<p class="muted">None recorded.</p>`}
@@ -350,10 +350,10 @@ function kpiRow(report, summary, cov) {
   const secReasonCount = Array.isArray(summary?.securityReasons) ? summary.securityReasons.length : 0;
 
   return `<div class="kpis">
-    ${kpiCard("Change risk", cr ? upper(cr) : kpiUnavailable("change"), crCls,
+    ${kpiCard("Change Risk", cr ? upper(cr) : kpiUnavailable("change"), crCls,
       cr ? (crArea ? `Highest-risk area: ${crArea}` : "Based on affected areas and inherent risk") : "Adapter produced no findings", ICONS.gauge)}
-    ${kpiCard("Test coverage", tc ? upper(tc) : kpiUnavailable("coverage"), tcCls, covSub, ICONS.shield)}
-    ${kpiCard("Security risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : kpiUnavailable("security"), secCls,
+    ${kpiCard("Test Coverage", tc ? upper(tc) : kpiUnavailable("coverage"), tcCls, covSub, ICONS.shield)}
+    ${kpiCard("Security Risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : kpiUnavailable("security"), secCls,
       sec === "failed" ? `${secReasonCount} deterministic check${secReasonCount === 1 ? "" : "s"} failed`
         : sec === "passed" ? "Deterministic security checks passed" : "No security scan was supplied", ICONS.lock)}
   </div>`;
@@ -364,7 +364,7 @@ function kpiRow(report, summary, cov) {
  * blocked (skipped, not run, in progress, quarantined). */
 function executionCard(cov) {
   if (!cov) {
-    return `<section class="card" aria-labelledby="x-h"><div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="x-h">Test execution summary</h2></div>
+    return `<section class="card" aria-labelledby="x-h"><div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="x-h">Test Execution Summary</h2></div>
       <div class="card__body"><p class="muted">No test execution data was returned for this assessment.</p></div></section>`;
   }
   const total = Math.max(cov.totalTests, 1);
@@ -376,7 +376,7 @@ function executionCard(cov) {
   ];
   const aria = seg.map(([l, n]) => `${n} ${l.toLowerCase()}`).join(", ");
   return `<section class="card" aria-labelledby="x-h">
-    <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="x-h">Test execution summary</h2>${badge(`${cov.totalTests} total`, "b-out")}</div>
+    <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="x-h">Test Execution Summary</h2>${badge(`${cov.totalTests} total`, "b-out")}</div>
     <div class="card__body">
       <div class="dist" role="img" aria-label="Test status distribution: ${esc(aria)}">${seg.map(([, n, c]) => (n ? `<i style="flex:${n};background:${c}"></i>` : "")).join("")}</div>
       <div class="leg">${seg.map(([l, n, c]) => `<span class="sw" style="background:${c}"></span><span>${l}</span><b>${n}</b><span class="muted pct">${Math.round((n / total) * 100)}%</span>`).join("")}</div>
@@ -392,7 +392,7 @@ function openDefectsCard(ctx) {
   const by = (s) => open.filter((d) => d.severity === s).length;
   const hp = open.filter((d) => d.severity === "critical" || d.severity === "high");
   return `<section class="card" aria-labelledby="d-h">
-    <div class="card__head"><span class="ico">${ICONS.bug}</span><h2 id="d-h">Open defects</h2>${badge(`${defects.length} total`, "b-out")}</div>
+    <div class="card__head"><span class="ico">${ICONS.bug}</span><h2 id="d-h">Open Defects</h2>${badge(`${defects.length} total`, "b-out")}</div>
     <div class="card__body">
       <div class="bigrow">
         <div><div class="big" style="color:${open.length ? "var(--crit-ink)" : "var(--ok-ink)"}">${open.length}</div><span class="hint">open</span></div>
@@ -400,7 +400,7 @@ function openDefectsCard(ctx) {
         <div><div class="big">${by("high")}</div><span class="hint">high</span></div>
         <div><div class="big">${open.filter((d) => d.security).length}</div><span class="hint">security-flagged</span></div>
       </div>
-      <span class="eyebrow" style="margin-top:16px">High-priority open defects</span>
+      <span class="eyebrow" style="margin-top:16px">High-Priority Open Defects</span>
       ${hp.length
         ? `<ul class="list">${hp.map((d) => `<li><span style="margin-top:1px">${severityCell(d.severity, severityClass(d.severity))}</span>
             <span><b class="mono">${esc(d.label || d.id || "")}</b> · ${esc(displayArea(d.area))}${d.security ? ` ${badge("Security", "b-security")}` : ""}<br><span class="muted">${formatFreeText(d.description)}</span></span></li>`).join("")}</ul>`
@@ -465,7 +465,7 @@ function riskRegister(report, ctx) {
   return `<section class="card card--risksig">
     <div class="card__head">
       <span class="ico">${ICONS.gauge}</span>
-      <h2>Risk signals &amp; open defects</h2>
+      <h2>Risk Signals &amp; Open Defects</h2>
       <span class="card__counts">
         <span>${rows.length} signal${rows.length === 1 ? "" : "s"}</span>
         <span class="card__counts-sep">·</span>
@@ -484,7 +484,7 @@ function findingsCard(report, ctx) {
   const cited = [...rows.filter((r) => r.flagged && r.kind === "Defect"), ...rows.filter((r) => r.flagged && r.kind !== "Defect")];
   const show = (cited.length ? cited : rows).slice(0, 3);
   return `<section class="card" aria-labelledby="f-h">
-    <div class="card__head"><span class="ico">${ICONS.gauge}</span><h2 id="f-h">Important findings</h2>
+    <div class="card__head"><span class="ico">${ICONS.gauge}</span><h2 id="f-h">Important Findings</h2>
       <span class="card__counts"><button class="linkbtn" type="button" data-nav="review">All ${rows.length} in Review</button></span></div>
     <div class="card__body card__body--flush">${registerTable(show)}</div>
   </section>`;
@@ -505,12 +505,12 @@ function insightsCard(report, summary, cov) {
       <div class="mini-card${cov.uncoveredCritical?.length ? " mini-card--flag" : ""}"><div class="mini-card__n">${cov.uncoveredCritical?.length ?? 0}</div><div class="mini-card__t">Uncovered critical criteria</div></div>
     </div>` : `<p class="muted mb-4">No coverage statistics were returned for this assessment.</p>`;
   return `<section class="card" aria-labelledby="i-h">
-    <div class="card__head"><span class="ico">${ICONS.target}</span><h2 id="i-h">Testing insights &amp; coverage gaps</h2></div>
+    <div class="card__head"><span class="ico">${ICONS.target}</span><h2 id="i-h">Testing Insights &amp; Coverage Gaps</h2></div>
     <div class="card__body">
       ${tiles}
-      ${covReasons.length ? `<span class="eyebrow">Coverage checks (deterministic QA rules)</span>
+      ${covReasons.length ? `<span class="eyebrow">Coverage Checks (Deterministic QA Rules)</span>
         <ul class="list list--gap mb-4">${covReasons.map((r) => `<li>${ICONS.shield}<span>${esc(r)}</span></li>`).join("")}</ul>` : ""}
-      <span class="eyebrow">Missing / incomplete evidence</span>
+      <span class="eyebrow">Missing / Incomplete Evidence</span>
       ${missing.length
         ? `<ul class="list list--gap">${missing.map((m) => `<li>${ICONS.alert}<span>${esc(m)}</span></li>`).join("")}</ul>`
         : `<p class="muted">No evidence gaps were recorded for this release.</p>`}
@@ -535,7 +535,7 @@ function recommendationsCard(report) {
     ? actions.map((a) => `<li>${ICONS.check}<span>${esc(a)}</span></li>`).join("")
     : `<li>${ICONS.check}<span>No follow-up actions were derived from the submitted evidence.</span></li>`;
   return `<section class="card card--actions" aria-labelledby="a-h">
-    <div class="card__head"><span class="ico">${ICONS.target}</span><h2 id="a-h">Recommended next actions</h2></div>
+    <div class="card__head"><span class="ico">${ICONS.target}</span><h2 id="a-h">Recommended Next Actions</h2></div>
     <div class="card__body">
       <ul class="list list--act">${items}</ul>
     </div>
@@ -547,19 +547,19 @@ function recommendationsCard(report) {
 function readinessCard(report, summary) {
   const reasons = Array.isArray(report.reasons) ? report.reasons : [];
   const gateBlock = reasons.length
-    ? `<span class="eyebrow">Gate findings (deterministic)</span>
+    ? `<span class="eyebrow">Gate Findings (Deterministic)</span>
        <ul class="list">${reasons.map((r) => `<li>${ICONS.scale}<span>${esc(r)}</span></li>`).join("")}</ul>`
     : `<p class="muted">The deterministic gate reported no blocking findings.</p>`;
 
   const secReasons = summary?.securityRisk === "failed" && Array.isArray(summary.securityReasons)
     ? summary.securityReasons : [];
   const secBlock = secReasons.length
-    ? `<span class="eyebrow" style="margin-top:16px">Security checks (deterministic QA rules)</span>
+    ? `<span class="eyebrow" style="margin-top:16px">Security Checks (Deterministic QA Rules)</span>
        <ul class="list">${secReasons.map((r) => `<li>${ICONS.shield}<span>${esc(r)}</span></li>`).join("")}</ul>`
     : "";
 
   return `<section class="card card--gate" aria-labelledby="r-h">
-    <div class="card__head"><span class="ico">${ICONS.scale}</span><h2 id="r-h">Release readiness: key risks &amp; blockers</h2><span class="lane lane--gate">Deterministic gate</span></div>
+    <div class="card__head"><span class="ico">${ICONS.scale}</span><h2 id="r-h">Release Readiness: Key Risks &amp; Blockers</h2><span class="lane lane--gate">Deterministic gate</span></div>
     <div class="card__body">
       ${gateBlock}
       ${secBlock}
@@ -631,14 +631,14 @@ function aiPanel(report, meta, mode) {
   // once, in the Risk signals tab — this section owns the narrative summary
   // only, plus a pointer, so the same finding is never listed twice.
   const summary = `<section class="card card--ai">
-    <div class="card__head"><span class="ico">${ICONS.sparkle}</span><h2>AI risk intelligence</h2><span class="lane lane--ai">Advisory</span></div>
+    <div class="card__head"><span class="ico">${ICONS.sparkle}</span><h2>AI Risk Intelligence</h2><span class="lane lane--ai">Advisory</span></div>
     <div class="card__body">
-      <span class="eyebrow">Change summary</span>
+      <span class="eyebrow">Change Summary</span>
       <p class="lead mb-4">${report.changeSummary ? formatFreeText(report.changeSummary) : "Not provided."}</p>
       ${riskCount
         ? `<p class="hint mb-4">${riskCount} identified risk${riskCount === 1 ? "" : "s"}. See Risk signals for the itemized list.</p>`
         : `<p class="muted mb-4">No risks were identified from the submitted evidence.</p>`}
-      <span class="eyebrow">Why is this release risky?</span>
+      <span class="eyebrow">Why Is This Release Risky?</span>
       ${report.aiQaExplanation ? `<p class="lead">${formatFreeText(report.aiQaExplanation)}</p>` : `<p class="muted">No explanation was produced.</p>`}
     </div>
   </section>`;
@@ -664,7 +664,7 @@ function aiPanel(report, meta, mode) {
 
   return `${summary}
   <section class="card card--ai">
-    <div class="card__head"><span class="ico">${ICONS.cpu}</span><h2>AI analysis pipeline</h2>${badge(modeLabel(mode), "b-out")}</div>
+    <div class="card__head"><span class="ico">${ICONS.cpu}</span><h2>AI Analysis Pipeline</h2>${badge(modeLabel(mode), "b-out")}</div>
     <div class="card__body">
       <div class="aistage-rows">${items}</div>
       <p class="mode-note mt-3">Reflects the real pipeline trace for this assessment. It is not a simulation.</p>
@@ -739,7 +739,7 @@ function scenariosPanel(report) {
     return `<div class="empty"><span class="ico">${ICONS.check}</span><div><b>No missing scenarios</b>None were derived from the submitted evidence.</div></div>`;
   }
   const groups = groupScenarios(list);
-  return `<section class="card"><div class="card__head"><span class="ico">${ICONS.target}</span><h2>Missing test scenarios</h2>${badge(String(list.length), "b-neutral")}</div>
+  return `<section class="card"><div class="card__head"><span class="ico">${ICONS.target}</span><h2>Missing Test Scenarios</h2>${badge(String(list.length), "b-neutral")}</div>
     <div class="card__body">${groups.map((g) => `<div class="scn-group">
       <div class="scn-group__h">${ICONS.target} ${esc(g.name)} ${badge(String(g.items.length), "b-neutral")}</div>
       <ul>${g.items.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>
@@ -770,7 +770,7 @@ function defectsPanel(report, ctx) {
   }).join("");
 
   const openCount = defects.filter((d) => d.status === "open").length;
-  return `<section class="card"><div class="card__head"><span class="ico">${ICONS.bug}</span><h2>Known defects</h2>${badge(`${defects.length} total, ${openCount} open`, "b-neutral")}</div>
+  return `<section class="card"><div class="card__head"><span class="ico">${ICONS.bug}</span><h2>Known Defects</h2>${badge(`${defects.length} total, ${openCount} open`, "b-neutral")}</div>
     <div class="card__body card__body--flush">${tableWrap(`<tr><th>Defect</th><th>Severity</th><th>Status</th><th>Security</th><th>Related area</th><th>Release impact</th></tr>`, rows)}</div></section>`;
 }
 
@@ -787,7 +787,7 @@ function regressionPanel(report) {
     <td data-label="Area">${esc(displayArea(p.area))}</td>
     <td data-label="Reason">${formatFreeText(p.rationale || "")}</td>
   </tr>`).join("");
-  return `<section class="card"><div class="card__head"><span class="ico">${ICONS.route}</span><h2>Regression priorities</h2>${badge(String(list.length), "b-neutral")}</div>
+  return `<section class="card"><div class="card__head"><span class="ico">${ICONS.route}</span><h2>Regression Priorities</h2>${badge(String(list.length), "b-neutral")}</div>
     <div class="card__body card__body--flush">${tableWrap(`<tr><th>Priority</th><th>Area</th><th>Reason</th></tr>`, rows)}</div></section>`;
 }
 
@@ -817,7 +817,7 @@ function decisionTraceAccordion(report, ctx, cov) {
   };
   const node = (title, sub, { kind = "", ok } = {}) => `<div class="tnode">
     <div class="trail">${dot(kind, ok)}<span class="tline"></span></div>
-    <div class="tbody"><h4>${esc(title)}</h4><div class="sub">${esc(sub)}</div></div>
+    <div class="tbody"><h4>${esc(headingCase(title))}</h4><div class="sub">${esc(sub)}</div></div>
   </div>`;
 
   const counts = cov
@@ -866,11 +866,11 @@ function technicalAccordion(result, report, meta, mode) {
       <dt>Gate rule fired</dt><dd class="mono">${esc(report.firedRule || "N/A")}</dd>
       <dt>Decision authority</dt><dd>${esc(report.decisionAuthority || "evaluateReleaseGate() (deterministic).")}</dd>
     </dl>
-    <div><span class="eyebrow">Pipeline stages</span>${chipRow((meta.pipelineStages || []).map((s, i) => `${i + 1}. ${s}`))}</div>
-    <div><span class="eyebrow">MCP tools</span>${chipRow(meta.mcpTools)}</div>
-    <div><span class="eyebrow">Gate evaluation order</span>${chipRow(meta.evaluationOrder)}</div>
-    <div><span class="eyebrow">Data provenance</span>${tableWrap(`<tr><th>Key</th><th>Value</th></tr>`, provRows)}</div>
-    <div><span class="eyebrow">Pipeline trace</span>${tableWrap(`<tr><th>Step</th><th>Result</th><th>Detail</th></tr>`, traceRows)}</div>
+    <div><span class="eyebrow">Pipeline Stages</span>${chipRow((meta.pipelineStages || []).map((s, i) => `${i + 1}. ${s}`))}</div>
+    <div><span class="eyebrow">MCP Tools</span>${chipRow(meta.mcpTools)}</div>
+    <div><span class="eyebrow">Gate Evaluation Order</span>${chipRow(meta.evaluationOrder)}</div>
+    <div><span class="eyebrow">Data Provenance</span>${tableWrap(`<tr><th>Key</th><th>Value</th></tr>`, provRows)}</div>
+    <div><span class="eyebrow">Pipeline Trace</span>${tableWrap(`<tr><th>Step</th><th>Result</th><th>Detail</th></tr>`, traceRows)}</div>
   </div>`;
 
   return accordion("technical", { icon: ICONS.flask, title: "Technical details", meta: `<span class="muted">Collapsed by default</span>` }, body);
@@ -930,12 +930,12 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
   const page1 = `
     <div class="pr-hero pr-hero--${decClass}">
       <div class="pr-hero__main">
-        <span class="pr-eyebrow">Deterministic release gate</span>
+        <span class="pr-eyebrow">Deterministic Release Gate</span>
         <div class="pr-hero__row"><span class="pr-hero__ring">${decIcon}</span><span class="pr-hero__value">${esc(decLabel)}</span></div>
         <span class="pr-hero__rule">${report.firedRule ? "Rule " + esc(report.firedRule) : "No rule identifier"}</span>
       </div>
       <div class="pr-hero__reason">
-        <span class="pr-eyebrow">Decision reason</span>
+        <span class="pr-eyebrow">Decision Reason</span>
         <p>${esc(reasons[0] || "The deterministic QA gate reported no blocking reasons for this release.")}</p>
         ${(() => {
           const note = goEvidenceNote(decision, summary);
@@ -945,23 +945,23 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
     </div>
 
     <div class="pr-kpis">
-      ${prKpi("Change risk", cr ? upper(cr) : "Not calculated", crTone, cr ? "Inherent risk across affected areas" : "No adapter findings")}
-      ${prKpi("Test coverage", tc ? upper(tc) : "Not calculated", tcTone, cov ? cov.coveragePercent + "% criteria with a passing test" : "No coverage data")}
-      ${prKpi("Security risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : "Scan not provided", secTone,
+      ${prKpi("Change Risk", cr ? upper(cr) : "Not calculated", crTone, cr ? "Inherent risk across affected areas" : "No adapter findings")}
+      ${prKpi("Test Coverage", tc ? upper(tc) : "Not calculated", tcTone, cov ? cov.coveragePercent + "% criteria with a passing test" : "No coverage data")}
+      ${prKpi("Security Risk", sec === "failed" ? "FAIL" : sec === "passed" ? "PASS" : "Scan not provided", secTone,
         sec === "failed" ? (summary.securityReasons?.length || 0) + " deterministic check(s) failed" : sec === "passed" ? "Deterministic checks passed" : "No security scan supplied")}
     </div>
 
-    <h2 class="pr-h2">Top release blockers</h2>
+    <h2 class="pr-h2">Top Release Blockers</h2>
     ${reasons.length
       ? `<ol class="pr-list pr-list--crit">${reasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ol>`
       : `<p class="pr-muted">The deterministic gate reported no blocking reasons.</p>`}
 
-    <h2 class="pr-h2">Recommended next actions</h2>
+    <h2 class="pr-h2">Recommended Next Actions</h2>
     ${actions.length
       ? `<ol class="pr-list pr-list--act">${actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ol>`
       : `<p class="pr-muted">No follow-up actions were derived from the submitted evidence.</p>`}
 
-    <h2 class="pr-h2">Change under assessment</h2>
+    <h2 class="pr-h2">Change Under Assessment</h2>
     <p class="pr-para">${esc(report.changeSummary || ctx.releaseScope || "Not provided.")}</p>
   `;
 
@@ -1014,7 +1014,7 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
   const execBar = cov ? `<div class="pr-dist" role="img" aria-label="${esc(execSeg.map(([l, c]) => `${c} ${l.toLowerCase()}`).join(", "))}">${execSeg.map(([, c, t]) => (c ? `<i class="pr-dist--${t}" style="flex:${c}"></i>` : "")).join("")}</div>
     <div class="pr-leg">${execSeg.map(([l, c, t]) => `<span><i class="pr-dist--${t}"></i>${esc(l)} <b>${c}</b></span>`).join("")}</div>` : "";
   const page3 = `
-    <h3 class="pr-h3">Test execution summary</h3>
+    <h3 class="pr-h3">Test Execution Summary</h3>
     ${execBar}
     <table class="pr-table pr-table--kv">
       <tbody>
@@ -1029,27 +1029,27 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
       </tbody>
     </table>
 
-    <h3 class="pr-h3">Uncovered critical criteria</h3>
+    <h3 class="pr-h3">Uncovered Critical Criteria</h3>
     ${uncovered.length
       ? `<p class="pr-para pr-mono">${uncovered.map(esc).join(", ")}</p>`
       : `<p class="pr-muted">None — every critical acceptance criterion has an active test.</p>`}
 
-    <h3 class="pr-h3">Failed deterministic rules</h3>
+    <h3 class="pr-h3">Failed Deterministic Rules</h3>
     ${failedRules.length
       ? `<p class="pr-para pr-mono">${failedRules.map(esc).join(", ")}</p>`
       : `<p class="pr-muted">No deterministic rule was recorded as failed.</p>`}
 
-    <h3 class="pr-h3">Security checks</h3>
+    <h3 class="pr-h3">Security Checks</h3>
     ${(summary?.securityReasons || []).length
       ? `<ul class="pr-list">${summary.securityReasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>`
       : `<p class="pr-muted">${sec === "passed" ? "Deterministic security checks passed." : "No security scan was supplied."}</p>`}
 
-    <h3 class="pr-h3">Coverage checks</h3>
+    <h3 class="pr-h3">Coverage Checks</h3>
     ${(summary?.coverageReasons || []).length
       ? `<ul class="pr-list">${summary.coverageReasons.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>`
       : `<p class="pr-muted">No coverage rule was recorded as failed.</p>`}
 
-    <h3 class="pr-h3">Missing test scenarios</h3>
+    <h3 class="pr-h3">Missing Test Scenarios</h3>
     ${(report.missingScenarios || []).length
       ? `<ul class="pr-list">${report.missingScenarios.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>`
       : `<p class="pr-muted">No missing scenarios were derived from the submitted evidence.</p>`}
@@ -1059,16 +1059,16 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
   const prov = report.dataProvenance || result?.provenance || {};
   const trace = report.pipelineTrace || [];
   const page4 = `
-    <h3 class="pr-h3">Pipeline stages</h3>
+    <h3 class="pr-h3">Pipeline Stages</h3>
     <ol class="pr-list">${(meta.pipelineStages || []).map((s) => `<li>${esc(s)}</li>`).join("") || `<li class="pr-muted">Not recorded.</li>`}</ol>
 
-    <h3 class="pr-h3">Gate evaluation order</h3>
+    <h3 class="pr-h3">Gate Evaluation Order</h3>
     <p class="pr-para pr-mono">${(meta.evaluationOrder || []).map(esc).join(" → ") || "Not recorded."}</p>
 
-    <h3 class="pr-h3">MCP data tools</h3>
+    <h3 class="pr-h3">MCP Data Tools</h3>
     <p class="pr-para pr-mono">${(meta.mcpTools || []).map(esc).join(", ") || "Not recorded."}</p>
 
-    <h3 class="pr-h3">Pipeline trace</h3>
+    <h3 class="pr-h3">Pipeline Trace</h3>
     <table class="pr-table">
       <thead><tr><th>Step</th><th>Result</th><th>Detail</th></tr></thead>
       <tbody>${trace.length ? trace.map((t) => `<tr>
@@ -1078,14 +1078,14 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
       </tr>`).join("") : `<tr><td colspan="3" class="pr-muted">No trace recorded.</td></tr>`}</tbody>
     </table>
 
-    <h3 class="pr-h3">Data provenance</h3>
+    <h3 class="pr-h3">Data Provenance</h3>
     <table class="pr-table pr-table--kv"><tbody>
       ${Object.keys(prov).length ? Object.entries(prov).map(([k, v]) =>
         `<tr><th>${esc(humanizeKey(k))}</th><td colspan="3">${esc(String(v))}</td></tr>`).join("")
         : `<tr><td class="pr-muted">No provenance recorded.</td></tr>`}
     </tbody></table>
 
-    <h3 class="pr-h3">Decision authority</h3>
+    <h3 class="pr-h3">Decision Authority</h3>
     <p class="pr-para">${esc(report.decisionAuthority || "evaluateReleaseGate() (deterministic). The AI agent explains the risk; it does not decide.")}</p>
   `;
 
@@ -1117,7 +1117,7 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
                <h1 class="pr-h1">${esc(assessmentName)}</h1>
                <p class="pr-sub pr-mono">${esc(assessmentId)}${ctx.criticality ? " · " + esc(upper(ctx.criticality)) + " criticality" : ""} · Generated ${esc(genStamp)}</p>`
             : `<span class="pr-eyebrow">Section ${idx + 1} of ${total}</span>
-               <h1 class="pr-h1 pr-h1--sm">${esc(p.title)}</h1>
+               <h1 class="pr-h1 pr-h1--sm">${esc(headingCase(p.title))}</h1>
                <p class="pr-sub pr-mono">${esc(assessmentName)} · ${esc(assessmentId)}</p>`}
         </div>
       </header>

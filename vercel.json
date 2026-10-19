@@ -3,6 +3,7 @@
   "builds": [
     { "src": "api/vercel/health.ts", "use": "@vercel/node" },
     { "src": "api/vercel/meta.ts", "use": "@vercel/node" },
+    { "src": "api/vercel/quality-gates.ts", "use": "@vercel/node" },
     { "src": "api/vercel/scenarios.ts", "use": "@vercel/node" },
     { "src": "api/vercel/scenario.ts", "use": "@vercel/node" },
     { "src": "api/vercel/assess.ts", "use": "@vercel/node" },
@@ -14,11 +15,13 @@
     { "src": "web/components.js", "use": "@vercel/static" },
     { "src": "web/format.js", "use": "@vercel/static" },
     { "src": "web/icons.js", "use": "@vercel/static" },
-    { "src": "web/upload.js", "use": "@vercel/static" }
+    { "src": "web/upload.js", "use": "@vercel/static" },
+    { "src": "web/gates.js", "use": "@vercel/static" }
   ],
   "routes": [
     { "src": "^/api/health$", "dest": "/api/vercel/health.ts" },
     { "src": "^/api/meta$", "dest": "/api/vercel/meta.ts" },
+    { "src": "^/api/quality-gates$", "dest": "/api/vercel/quality-gates.ts" },
     { "src": "^/api/scenarios$", "dest": "/api/vercel/scenarios.ts" },
     { "src": "^/api/scenario$", "dest": "/api/vercel/scenario.ts" },
     { "src": "^/api/assess/custom$", "dest": "/api/vercel/assess-custom.ts" },

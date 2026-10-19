@@ -7,7 +7,7 @@
 // the escaping helpers in format.js.
 
 import { ICONS } from "./icons.js";
-import { esc, attr, upper } from "./format.js";
+import { esc, attr, upper, headingCase } from "./format.js";
 import {
   readEvidenceFile, rowsToTestCases, rowsToDefects, TEMPLATES, downloadText,
   TEXT_EXT, REFERENCE_EXT,
@@ -541,7 +541,7 @@ function pageHead() {
   const c = STAGE_COPY[state.stage];
   const n = state.stage === "context" ? 1 : 2;
   return `<div class="pagehead">
-    <div><span class="eyebrow">Stage ${n} of 5</span><h1 id="page-h" tabindex="-1">${c.title}</h1><p>${c.sub}</p></div>
+    <div><span class="eyebrow">Stage ${n} of 5</span><h1 id="page-h" tabindex="-1">${esc(headingCase(c.title))}</h1><p>${c.sub}</p></div>
     ${toolsBlock()}
   </div>`;
 }
@@ -597,7 +597,7 @@ function contextStageHtml() {
   const acBad = t.ac && acLabels().length === 0;
   return `
     <section class="card" aria-labelledby="h-ctx">
-      <div class="card__head"><span class="ico">${ICONS.book}</span><h2 id="h-ctx">Release context</h2>${sectionBadge("context")}</div>
+      <div class="card__head"><span class="ico">${ICONS.book}</span><h2 id="h-ctx">Release Context</h2>${sectionBadge("context")}</div>
       <div class="card__body">
         <div class="grid-2">
           <div class="field">
@@ -624,7 +624,7 @@ function contextStageHtml() {
     </section>
 
     <section class="card" aria-labelledby="h-ac">
-      <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="h-ac">Acceptance criteria</h2>${sectionBadge("ac")}</div>
+      <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="h-ac">Acceptance Criteria</h2>${sectionBadge("ac")}</div>
       <div class="card__body">
         <div class="rows">${acs.map((ac, i) => acRow(ac, i, acs.length)).join("")}</div>
         <span ${acBad ? "" : "hidden"}>${errLine("err-ac", "Add at least one acceptance criterion.")}</span>
@@ -633,7 +633,7 @@ function contextStageHtml() {
     </section>
 
     <section class="card" aria-labelledby="h-br">
-      <div class="card__head"><span class="ico">${ICONS.book}</span><h2 id="h-br">Business rules</h2>${sectionBadge("br")}</div>
+      <div class="card__head"><span class="ico">${ICONS.book}</span><h2 id="h-br">Business Rules</h2>${sectionBadge("br")}</div>
       <div class="card__body">
         ${state.businessRules.length
           ? `<div class="rows">${state.businessRules.map(brRow).join("")}</div>`
@@ -647,12 +647,12 @@ function evidenceStageHtml() {
   return `
     ${validationBlock()}
     <section class="card card--evidence-status" aria-labelledby="h-evs">
-      <div class="card__head"><span class="ico">${ICONS.clipboard}</span><h2 id="h-evs">Evidence provided so far</h2></div>
+      <div class="card__head"><span class="ico">${ICONS.clipboard}</span><h2 id="h-evs">Evidence Provided So Far</h2></div>
       <div class="card__body" data-preview>${(lastPreviewHtml = evidenceSummaryBlock())}</div>
     </section>
 
     <section class="card" aria-labelledby="h-tc">
-      <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="h-tc">QA evidence · existing test cases</h2>${sectionBadge("tests")}</div>
+      <div class="card__head"><span class="ico">${ICONS.list}</span><h2 id="h-tc">QA Evidence · Existing Test Cases</h2>${sectionBadge("tests")}</div>
       <div class="card__body">
         ${state.testCases.length
           ? `<div class="rows">${state.testCases.map(tcRow).join("")}</div>`
@@ -662,7 +662,7 @@ function evidenceStageHtml() {
     </section>
 
     <section class="card" aria-labelledby="h-df">
-      <div class="card__head"><span class="ico">${ICONS.bug}</span><h2 id="h-df">Known defects</h2>${sectionBadge("defects")}</div>
+      <div class="card__head"><span class="ico">${ICONS.bug}</span><h2 id="h-df">Known Defects</h2>${sectionBadge("defects")}</div>
       <div class="card__body">
         ${state.knownDefects.length
           ? `<div class="rows">${state.knownDefects.map(dfRow).join("")}</div>`
@@ -672,7 +672,7 @@ function evidenceStageHtml() {
     </section>
 
     <section class="card" aria-labelledby="h-docs">
-      <div class="card__head"><span class="ico">${ICONS.upload}</span><h2 id="h-docs">Supporting documents</h2>${sectionBadge("docs")}</div>
+      <div class="card__head"><span class="ico">${ICONS.upload}</span><h2 id="h-docs">Supporting Documents</h2>${sectionBadge("docs")}</div>
       <div class="card__body">
         <div class="dropzone" data-drop>
           <span class="dropzone__icon">${ICONS.upload}</span>

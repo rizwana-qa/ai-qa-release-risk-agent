@@ -6,6 +6,7 @@
 // never shows GO from a client-side fallback.
 
 import * as C from "./components.js";
+import { qualityGatesView, qualityGatesError } from "./gates.js";
 import { ICONS } from "./icons.js";
 import { decisionLabel, decisionClass, esc } from "./format.js";
 import { mountWorkspace, getPayload, setValidation, setBusy, getWorkflowState, loadScenario, showStage } from "./workspace.js";
@@ -26,6 +27,8 @@ const headDecision = document.getElementById("hdr-decision");
 const menuBtn = document.getElementById("menu-btn");
 const menuList = document.getElementById("menu-list");
 const relaunchBtn = document.getElementById("relaunch-btn");
+const gatesView = document.getElementById("gates-view");
+const GATES_HASH = "#/quality-gates";
 
 const app = {
   phase: "workspace", // workspace | processing | report
@@ -601,6 +604,47 @@ menuList.addEventListener("click", (e) => {
   }
 });
 
+/* ----------------------- quality gates (read-only page) ------------------- */
+//
+// A reference page, not a workflow stage. It lives in its own container so the
+// assessment underneath (form inputs, report) is left exactly as it was.
+
+let gatesDoc = null;
+
+async function showGates() {
+  closeMenu();
+  view.hidden = true;
+  gatesView.hidden = false;
+  document.body.dataset.page = "gates";
+  if (!gatesDoc) {
+    gatesView.innerHTML = '<p class="muted" role="status">Loading quality gates…</p>';
+    try { gatesDoc = await fetchJson("/api/quality-gates"); }
+    catch (err) { gatesView.innerHTML = qualityGatesError(errText(err)); return; }
+  }
+  gatesView.innerHTML = qualityGatesView(gatesDoc);
+  window.scrollTo({ top: 0 });
+  gatesView.querySelector("#qg-h")?.focus({ preventScroll: true });
+}
+
+function hideGates() {
+  if (gatesView.hidden) return;
+  gatesView.hidden = true;
+  view.hidden = false;
+  delete document.body.dataset.page;
+  paintSteps();
+}
+
+function syncRoute() { if (location.hash === GATES_HASH) showGates(); else hideGates(); }
+window.addEventListener("hashchange", syncRoute);
+
+// Choosing anything in the workflow leaves the reference page first.
+document.addEventListener("click", (e) => {
+  if (!gatesView.hidden && e.target.closest("[data-step], #menu-list [data-act]")) {
+    history.replaceState(null, "", location.pathname + location.search);
+    hideGates();
+  }
+}, true);
+
 /* --------------------------------- fetch ----------------------------- */
 
 async function fetchJson(url, opts) {
@@ -624,3 +668,4 @@ function errText(err) {
 /* --------------------------------- boot ------------------------------ */
 
 toWorkspace();
+syncRoute();

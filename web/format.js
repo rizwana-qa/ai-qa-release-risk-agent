@@ -15,6 +15,26 @@ export function attr(value) {
   return esc(value).replaceAll("\n", " ").replaceAll("\r", " ");
 }
 
+/** Acronyms and decision labels that keep their capitals inside a heading. */
+const HEADING_KEEP = new Set(["QA", "AI", "API", "PDF", "UI", "UX", "MCP", "ID", "CSV", "UTC", "GO", "NO-GO", "NO_GO", "CONDITIONAL"]);
+
+function headingWord(raw) {
+  if (!raw || HEADING_KEEP.has(raw)) return raw;
+  if (/^&[#\w]+;$/.test(raw) || !/[A-Za-z]/.test(raw)) return raw; // entity, number or symbol
+  // Identifiers stay as written: anything with a digit or underscore (GATE-4, NO_GO), or camelCase / inner capitals.
+  if (/[0-9_]/.test(raw) || /[a-z][A-Z]/.test(raw)) return raw;
+  return raw.split("-").map((part) => (HEADING_KEEP.has(part) ? part : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())).join("-");
+}
+
+/** Presentation-only heading case: first letter of every word capitalised, the rest lower-case, except approved
+ * acronyms/decision labels and identifiers. Never use it on user-entered values, only on heading text. */
+export function headingCase(text) {
+  return String(text ?? "").split(/(\s+|\/)/).map((tok) => {
+    const m = tok.match(/^([("'“]*)(.*?)([)"'.,:;!?”]*)$/);
+    return m ? m[1] + headingWord(m[2]) + m[3] : tok;
+  }).join("");
+}
+
 export function humanizeArea(area) {
   const s = String(area ?? "").trim();
   if (!s) return "N/A";
