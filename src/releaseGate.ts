@@ -14,7 +14,12 @@
  *   GATE-2  Security failure ............................... NO_GO
  *   GATE-3  Critical acceptance criterion with no coverage . NO_GO
  *   GATE-4  High-risk change + insufficient coverage ....... CONDITIONAL
+ *   GATE-6  No passing test mapped to any criterion ........ CONDITIONAL
  *   GATE-5  Otherwise ..................................... GO
+ *
+ * GATE-6 is additive: it keeps its own number and is evaluated after GATE-4 and
+ * before GATE-5, so no existing gate was renumbered. It is a minimum-evidence
+ * floor, not proof of verification.
  *
  * Fail-safe: if `findings` is missing, not an object, or structurally invalid,
  * the gate returns NO_GO with `firedRule: "FAIL_SAFE"`. Missing data is never
@@ -81,7 +86,7 @@ export interface ReleaseFindings {
 
 export interface GateResult {
   decision: Decision;
-  /** "GATE-1".."GATE-5", or "FAIL_SAFE" for invalid input. */
+  /** "GATE-1".."GATE-6", or "FAIL_SAFE" for invalid input. */
   firedRule: string;
   /** Human-readable justification lines, in evaluation order. */
   reasons: string[];
@@ -96,6 +101,7 @@ export const EVALUATION_ORDER = [
   "GATE-2",
   "GATE-3",
   "GATE-4",
+  "GATE-6",
   "GATE-5",
 ] as const;
 
@@ -105,6 +111,7 @@ export const GATE_RULES: ReadonlyArray<{ id: string; condition: string; decision
   { id: "GATE-2", condition: "securityFailure() is true (SEC-1 open security defect, or SEC-2 uncovered security AC).", decision: "NO_GO" },
   { id: "GATE-3", condition: "At least one critical acceptance criterion with zero active test coverage.", decision: "NO_GO" },
   { id: "GATE-4", condition: "changeRiskLevel() is 'high' AND insufficientCoverage() is true.", decision: "CONDITIONAL" },
+  { id: "GATE-6", condition: "No acceptance criterion has an active (passing) test mapped to it.", decision: "CONDITIONAL" },
   { id: "GATE-5", condition: "None of the above.", decision: "GO" },
 ];
 
@@ -199,6 +206,24 @@ export function insufficientCoverage(findings: ReleaseFindings): { insufficient:
   }
 
   return { insufficient: reasons.length > 0, reasons };
+}
+
+/**
+ * Minimum evidence (GATE-6): at least one acceptance criterion must have at least
+ * one active (passing) test mapped to it. A test that is quarantined (failed,
+ * not run, skipped...), or that maps to no known criterion, does not count.
+ *
+ * This is the zero point of the COV-3 ratio, so it adds no new threshold. It is
+ * a floor, not proof that any criterion is verified.
+ */
+export function minimumEvidence(findings: ReleaseFindings): { met: boolean; reasons: string[] } {
+  const met = findings.acceptanceCriteria.some((ac) => activeCoverageCount(findings, ac.id) > 0);
+  return {
+    met,
+    reasons: met
+      ? []
+      : ["GATE-6: no passing test is mapped to any acceptance criterion; additional verification and review are required before this release can be GO."],
+  };
 }
 
 /**
@@ -420,6 +445,17 @@ export function evaluateReleaseGate(input: unknown): GateResult {
         decision: "CONDITIONAL",
         firedRule: "GATE-4",
         reasons: ["GATE-4: change risk level is 'high' and coverage is insufficient.", ...coverage.reasons],
+      };
+    }
+
+    // GATE-6 — Minimum evidence: no passing test is mapped to any criterion.
+    // After GATE-4 (an existing CONDITIONAL keeps its id), before GATE-5.
+    const evidence = minimumEvidence(findings);
+    if (!evidence.met) {
+      return {
+        decision: "CONDITIONAL",
+        firedRule: "GATE-6",
+        reasons: [...evidence.reasons, ...coverage.reasons],
       };
     }
 

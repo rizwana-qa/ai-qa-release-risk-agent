@@ -502,16 +502,22 @@ function evidenceSummaryBlock() {
   const tile = (n, label, flag = false) =>
     `<div class="stat${flag ? " stat--flag" : ""}"><div class="stat__n">${n}</div><div class="stat__t">${esc(label)}</div></div>`;
   const noEvidence = p.totalTests === 0;
+  const noPassingMapped = p.covered === 0; // display of the count above; the gate decides
   return `<div class="evstats">
       ${tile(p.totalTests, "Test cases provided", p.totalTests === 0)}
       ${tile(executed, "Execution results provided", executed === 0)}
       ${tile(defectsN, "Defects provided")}
       ${tile(docsN, "Supporting documents provided")}
     </div>
-    ${noEvidence
+    ${noPassingMapped
       ? `<div class="banner banner--warn mt-3" style="margin-bottom:0"><span class="ico">${ICONS.alert}</span>
-         <div><b>No test execution evidence has been provided.</b> This is not evidence of low risk. The assessment
-         will state that verification evidence is missing rather than assume the release is safe.</div></div>`
+         <div><b>${noEvidence ? "No test cases have been added." : "No passing test is mapped to an acceptance criterion."}</b>
+         The release gates decide from the evidence you submit. A release cannot be GO unless at least one acceptance criterion
+         has a passing test mapped to it. Without one the result is CONDITIONAL (additional verification and review needed),
+         or NO GO if a blocking rule applies. One passing test would not show that every criterion is verified.</div></div>`
+      : ""}
+    ${noEvidence
+      ? ""
       : `<div class="stats mt-3">
           ${tile(p.passed, "Passing")}
           ${tile(p.failed, "Failing", p.failed > 0)}
@@ -650,7 +656,7 @@ function evidenceStageHtml() {
       <div class="card__body">
         ${state.testCases.length
           ? `<div class="rows">${state.testCases.map(tcRow).join("")}</div>`
-          : `<div class="empty"><span class="ico">${ICONS.info}</span><div><b>No test cases added</b>If you leave this empty the report will state that evidence is insufficient. It will not invent any tests.</div></div>`}
+          : `<div class="empty"><span class="ico">${ICONS.info}</span><div><b>No test cases added</b>Without a passing test mapped to an acceptance criterion the release cannot be GO. No tests are invented.</div></div>`}
         <button class="addrow" type="button" data-act="tc-add">${ICONS.plus} Add test case</button>
       </div>
     </section>

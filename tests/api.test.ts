@@ -74,7 +74,7 @@ describe("demo API — static + scenario endpoints", () => {
     const { body } = await getJson("/api/meta");
     assert.equal(body.mcpTools.length, 4);
     assert.equal(body.stages.length, 6);
-    assert.deepEqual(body.evaluationOrder, ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-5"]);
+    assert.deepEqual(body.evaluationOrder, ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-6", "GATE-5"]);
   });
 
   it("GET / serves the workspace HTML shell", async () => {

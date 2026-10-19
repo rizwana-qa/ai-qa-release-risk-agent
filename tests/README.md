@@ -11,7 +11,7 @@ npm run check    # typecheck + tests
 
 | File | Tests | Covers |
 | --- | ---: | --- |
-| `releaseGate.test.ts` | 43 | Every gate rule in isolation and in combination; precedence (`GATE-1 → … → GATE-5`); fail-safe on malformed / missing input; determinism and non-mutation; the four helper predicates. |
+| `releaseGate.test.ts` | 59 | Every gate rule in isolation and in combination; precedence (`GATE-1 → … → GATE-4 → GATE-6 → GATE-5`), minimum evidence (GATE-6); fail-safe on malformed / missing input; determinism and non-mutation; the four helper predicates. |
 | `mcpServer.test.ts` | 22 | The four tools exist, take no parameters, and return their `data/*.json` file verbatim; output conforms to the Phase 2 structure; the datasets assemble into a valid `ReleaseFindings`; `dataLoader`. |
 | `agentOutputValidation.test.ts` | 36 | `validateAgentFindings()` accepts the valid fixture; rejects non-objects, every malformed field, every missing key, and all seven forbidden decision keys. |
 | `findingsAdapter.test.ts` | 14 | `projectSecurityFailureSeverities()` (Phase 2 rule → `["critical","high"]`, ordering, single-severity, throws when absent/empty); the adapter builds a valid `ReleaseFindings`, is deterministic, takes facts from data not commentary, and fails safe on provenance / referential / dataset mismatches. |

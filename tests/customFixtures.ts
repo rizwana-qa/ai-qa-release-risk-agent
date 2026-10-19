@@ -101,3 +101,29 @@ export function noEvidenceSecurityPayload() {
     knownDefects: [],
   };
 }
+
+/**
+ * Minimum-evidence scenarios (GATE-6). A small change in a medium-risk area
+ * ("orders") with three non-critical criteria, so no other gate blocks it
+ * unless a case adds one.
+ */
+export function thinPayload(over: Record<string, unknown> = {}) {
+  return {
+    releaseName: "Order list filter",
+    releaseScope: "Small change to the order list.",
+    userStory: "As a user I want to filter orders by date so that I can find them.",
+    criticality: "low",
+    acceptanceCriteria: [
+      { area: "orders", critical: false, text: "A user can filter the order list by date range." },
+      { area: "orders", critical: false, text: "The filter is remembered during the session." },
+      { area: "orders", critical: false, text: "Clearing the filter restores the full list." },
+    ],
+    businessRules: [],
+    testCases: [],
+    knownDefects: [],
+    supportingDocuments: [],
+    ...over,
+  };
+}
+export const thinTest = (status: string, covers: string[], label = "T1") =>
+  ({ label, title: "Filter orders", area: "orders", testType: "e2e", status, covers });

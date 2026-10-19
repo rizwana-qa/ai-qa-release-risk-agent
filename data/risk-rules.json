@@ -71,7 +71,7 @@
   "releaseGateRules": {
     "note": "These deterministic rules are the final release decision authority. They will be enforced by code in a later phase, NOT by the language model. The language model may explain the reasoning but must not produce or override the GO / NO_GO / CONDITIONAL decision.",
     "decisions": ["GO", "NO_GO", "CONDITIONAL"],
-    "evaluationOrder": ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-5"],
+    "evaluationOrder": ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-6", "GATE-5"],
     "rules": [
       {
         "id": "GATE-1",
@@ -91,6 +91,11 @@
       {
         "id": "GATE-4",
         "condition": "changeRiskLevel is 'high' AND insufficientCoverageRule evaluates to true.",
+        "decision": "CONDITIONAL"
+      },
+      {
+        "id": "GATE-6",
+        "condition": "No acceptance criterion has an active (passing) test mapped to it.",
         "decision": "CONDITIONAL"
       },
       {

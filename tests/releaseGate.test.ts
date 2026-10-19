@@ -122,7 +122,7 @@ describe("evaluateReleaseGate — rule outcomes", () => {
 
 describe("evaluateReleaseGate — rule precedence", () => {
   it("documents a single, ordered precedence chain", () => {
-    assert.deepEqual([...EVALUATION_ORDER], ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-5"]);
+    assert.deepEqual([...EVALUATION_ORDER], ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-6", "GATE-5"]);
     assert.deepEqual(GATE_RULES.map((r) => r.id), [...EVALUATION_ORDER]);
   });
 
@@ -355,5 +355,155 @@ describe("validateFindings", () => {
     const v = validateFindings({ affectedAreas: [], acceptanceCriteria: [], defects: null, tests: null, riskRules: null });
     assert.equal(v.ok, false);
     if (!v.ok) assert.ok(v.problems.length >= 4);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* GATE-6 — minimum evidence                                                  */
+/* -------------------------------------------------------------------------- */
+
+/** Small, medium-risk change with no blocking condition of its own. */
+function thinFindings(over: Partial<ReleaseFindings> = {}): ReleaseFindings {
+  return {
+    affectedAreas: ["orders"],
+    acceptanceCriteria: [
+      { id: "AC-1", area: "orders", critical: false },
+      { id: "AC-2", area: "orders", critical: false },
+      { id: "AC-3", area: "orders", critical: false },
+    ],
+    defects: [],
+    tests: [],
+    riskRules: {
+      riskLevelsByArea: { orders: "medium" },
+      criticalAreas: [],
+      coverageRatioThreshold: 0.8,
+      securityFailureSeverities: ["critical", "high"],
+    },
+    ...over,
+  };
+}
+const test_ = (testId: string, status: "active" | "quarantined", covers: string[]) => ({
+  testId, area: "orders", testType: "e2e" as const, coverageType: "positive" as const, status, covers,
+});
+
+describe("GATE-6: minimum evidence (no passing test mapped to any acceptance criterion)", () => {
+  it("is registered after GATE-4 and before GATE-5, without renumbering any gate", () => {
+    assert.deepEqual([...EVALUATION_ORDER], ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-6", "GATE-5"]);
+    const gate6 = GATE_RULES.find((r) => r.id === "GATE-6")!;
+    assert.equal(gate6.decision, "CONDITIONAL");
+    assert.equal(GATE_RULES.find((r) => r.id === "GATE-5")!.decision, "GO");
+  });
+
+  it("zero test cases -> CONDITIONAL / GATE-6, never GO", () => {
+    const r = evaluateReleaseGate(thinFindings());
+    assert.equal(r.decision, "CONDITIONAL");
+    assert.equal(r.firedRule, "GATE-6");
+    assert.match(r.reasons[0]!, /^GATE-6: .*no passing test is mapped to any acceptance criterion/);
+    assert.match(r.reasons.join(" "), /COV-3/);
+  });
+
+  it("only non-passing tests (failed, not-run and quarantined all reach the gate as quarantined) -> CONDITIONAL / GATE-6", () => {
+    const f = thinFindings({ tests: [test_("T1", "quarantined", ["AC-1"]), test_("T2", "quarantined", ["AC-2"])] });
+    const r = evaluateReleaseGate(f);
+    assert.equal(r.decision, "CONDITIONAL");
+    assert.equal(r.firedRule, "GATE-6");
+  });
+
+  it("an active test that maps to no criterion (empty covers) does not count -> CONDITIONAL / GATE-6", () => {
+    const r = evaluateReleaseGate(thinFindings({ tests: [test_("T1", "active", [])] }));
+    assert.equal(r.firedRule, "GATE-6");
+  });
+
+  it("an active test that maps only to an unknown criterion id does not count -> CONDITIONAL / GATE-6", () => {
+    const r = evaluateReleaseGate(thinFindings({ tests: [test_("T1", "active", ["AC-99"])] }));
+    assert.equal(r.firedRule, "GATE-6");
+  });
+
+  it("one active test mapped to one criterion satisfies the minimum; the other gates decide (GO / GATE-5 here)", () => {
+    const f = thinFindings({
+      acceptanceCriteria: [{ id: "AC-1", area: "orders", critical: false }],
+      tests: [test_("T1", "active", ["AC-1"])],
+    });
+    const r = evaluateReleaseGate(f);
+    assert.equal(r.decision, "GO");
+    assert.equal(r.firedRule, "GATE-5");
+  });
+
+  it("a passing mapped test plus non-passing tests: the minimum is met and the existing behaviour is unchanged", () => {
+    const f = thinFindings({
+      acceptanceCriteria: [{ id: "AC-1", area: "orders", critical: false }, { id: "AC-2", area: "orders", critical: false }],
+      tests: [test_("T1", "active", ["AC-1"]), test_("T2", "quarantined", ["AC-2"])],
+    });
+    const r = evaluateReleaseGate(f);
+    assert.equal(r.firedRule, "GATE-5");
+    assert.equal(r.decision, "GO");
+  });
+
+  it("nonzero coverage below 0.8 at medium risk keeps the existing GO / GATE-5 and lists COV-3 (no new blocking threshold)", () => {
+    const f = thinFindings({ tests: [test_("T1", "active", ["AC-1"])] }); // 1 of 3 criteria
+    const r = evaluateReleaseGate(f);
+    assert.equal(r.decision, "GO");
+    assert.equal(r.firedRule, "GATE-5");
+    assert.match(r.reasons.join(" "), /COV-3: .*0\.33 is below threshold 0\.8/);
+  });
+
+  it("coverage at or above 0.8 keeps GO / GATE-5 with no coverage reasons", () => {
+    const f = thinFindings({
+      acceptanceCriteria: [{ id: "AC-1", area: "orders", critical: false }],
+      tests: [test_("T1", "active", ["AC-1"])],
+    });
+    const r = evaluateReleaseGate(f);
+    assert.equal(r.firedRule, "GATE-5");
+    assert.doesNotMatch(r.reasons.join(" "), /COV-/);
+  });
+
+  it("an uncovered critical criterion stays NO_GO / GATE-3 with zero tests", () => {
+    const f = thinFindings({ acceptanceCriteria: [{ id: "AC-1", area: "orders", critical: true }] });
+    const r = evaluateReleaseGate(f);
+    assert.equal(r.decision, "NO_GO");
+    assert.equal(r.firedRule, "GATE-3");
+  });
+
+  it("an open critical defect stays NO_GO / GATE-1 with zero tests", () => {
+    const f = thinFindings({ defects: [{ defectId: "D-1", severity: "critical", status: "open", area: "orders", security: false }] });
+    const r = evaluateReleaseGate(f);
+    assert.equal(r.decision, "NO_GO");
+    assert.equal(r.firedRule, "GATE-1");
+  });
+
+  it("a security failure stays NO_GO / GATE-2 with zero tests (SEC-1 and SEC-2)", () => {
+    const sec1 = evaluateReleaseGate(thinFindings({ defects: [{ defectId: "D-1", severity: "high", status: "open", area: "orders", security: true }] }));
+    assert.equal(sec1.firedRule, "GATE-2");
+    const sec2 = evaluateReleaseGate(thinFindings({ acceptanceCriteria: [{ id: "AC-1", area: "security", critical: false }] }));
+    assert.equal(sec2.decision, "NO_GO");
+    assert.equal(sec2.firedRule, "GATE-2");
+  });
+
+  it("when GATE-4 and GATE-6 both hold, GATE-4 is reported (existing result takes precedence)", () => {
+    const f = thinFindings({
+      affectedAreas: ["payments"],
+      riskRules: { riskLevelsByArea: { payments: "high", orders: "medium" }, criticalAreas: [], coverageRatioThreshold: 0.8, securityFailureSeverities: ["critical", "high"] },
+    });
+    const r = evaluateReleaseGate(f);
+    assert.equal(r.decision, "CONDITIONAL");
+    assert.equal(r.firedRule, "GATE-4");
+  });
+
+  it("the existing CONDITIONAL case (high risk + COV-2) still reports GATE-4, unchanged", () => {
+    const f = baseFindings();
+    setDefectStatus(f, "DEF-004", "closed");
+    setTestStatus(f, "TEST-SEC-001", "active");
+    const r = evaluateReleaseGate(f);
+    assert.equal(r.firedRule, "GATE-4");
+  });
+
+  it("malformed input still fails safe to NO_GO / FAIL_SAFE", () => {
+    const r = evaluateReleaseGate({ ...thinFindings(), tests: "not an array" });
+    assert.equal(r.decision, "NO_GO");
+    assert.equal(r.firedRule, "FAIL_SAFE");
+  });
+
+  it("is deterministic", () => {
+    assert.deepEqual(evaluateReleaseGate(thinFindings()), evaluateReleaseGate(thinFindings()));
   });
 });

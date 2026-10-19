@@ -86,7 +86,15 @@ Evaluated strictly in this order; the first match wins. Invalid input → `NO_GO
 | GATE-2 | A **security failure** (open security defect at qualifying severity, or a `security`-area criterion with no active test) | `NO_GO` |
 | GATE-3 | A **critical acceptance criterion with no active coverage** | `NO_GO` |
 | GATE-4 | **High-risk change** *and* **insufficient coverage** | `CONDITIONAL` |
+| GATE-6 | **Minimum evidence:** no acceptance criterion has a passing test mapped to it | `CONDITIONAL` |
 | GATE-5 | Otherwise | `GO` |
+
+GATE-6 is additive: it keeps its own number and is evaluated after GATE-4 and
+before GATE-5, so no gate was renumbered. It is a minimum-evidence floor, not
+proof of verification: one passing mapped test does not show that every criterion
+or business rule is verified, and a `GO` means only that no gate blocked the
+release on the evidence supplied. Coverage above zero but below the illustrative
+`0.8` threshold at non-high risk still returns `GO`, with a visible warning.
 
 ## Architecture
 
@@ -147,7 +155,9 @@ flowchart TD
     Q3 -- yes --> N3["NO_GO — GATE-3"]
     Q3 -- no --> Q4{"high risk AND<br/>insufficient coverage?"}
     Q4 -- yes --> C4["CONDITIONAL — GATE-4"]
-    Q4 -- no --> G5["GO — GATE-5"]
+    Q4 -- no --> Q6{"no passing test mapped<br/>to any criterion?"}
+    Q6 -- yes --> C6["CONDITIONAL — GATE-6"]
+    Q6 -- no --> G5["GO — GATE-5"]
 ```
 
 ## Technology stack

@@ -104,12 +104,13 @@ export function buildPolicy(areas: readonly string[], scenarioId: string): Recor
       note:
         "These deterministic rules are the final release decision authority. They are enforced by evaluateReleaseGate() in code and cannot be altered by user input.",
       decisions: ["GO", "NO_GO", "CONDITIONAL"],
-      evaluationOrder: ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-5"],
+      evaluationOrder: ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-6", "GATE-5"],
       rules: [
         { id: "GATE-1", condition: "At least one defect with status 'open' and severity 'critical'.", decision: "NO_GO" },
         { id: "GATE-2", condition: "securityFailureRule evaluates to true.", decision: "NO_GO" },
         { id: "GATE-3", condition: "At least one critical acceptance criterion with zero active mapped tests.", decision: "NO_GO" },
         { id: "GATE-4", condition: "changeRiskLevel is 'high' AND insufficientCoverageRule evaluates to true.", decision: "CONDITIONAL" },
+        { id: "GATE-6", condition: "No acceptance criterion has an active (passing) test mapped to it.", decision: "CONDITIONAL" },
         { id: "GATE-5", condition: "None of the above conditions are met.", decision: "GO" },
       ],
     },

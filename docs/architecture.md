@@ -181,7 +181,8 @@ missing keys, and any of seven **forbidden top-level keys** (`decision`,
 `evaluateReleaseGate(input: unknown): { decision, firedRule, reasons }`.
 
 `decision` ∈ `GO | NO_GO | CONDITIONAL`. `firedRule` ∈
-`GATE-1 | GATE-2 | GATE-3 | GATE-4 | GATE-5 | FAIL_SAFE`.
+`GATE-1 | GATE-2 | GATE-3 | GATE-4 | GATE-5 | GATE-6 | FAIL_SAFE`
+(`GATE-6` is evaluated after `GATE-4` and before `GATE-5`; see `EVALUATION_ORDER`).
 
 **Precedence (`EVALUATION_ORDER`) — first match wins:**
 
@@ -197,7 +198,9 @@ flowchart TD
     Q3 -- yes --> N3["NO_GO"]
     Q3 -- no --> Q4{"GATE-4<br/>changeRiskLevel()=high AND insufficientCoverage()?"}
     Q4 -- yes --> C4["CONDITIONAL"]
-    Q4 -- no --> G5["GO — GATE-5"]
+    Q4 -- no --> Q6{"GATE-6<br/>minimumEvidence() met?<br/>(a passing test mapped to a criterion)"}
+    Q6 -- no --> C6["CONDITIONAL — GATE-6"]
+    Q6 -- yes --> G5["GO — GATE-5"]
 ```
 
 **Helper predicates** (all pure, all exported and unit-tested):
@@ -209,6 +212,9 @@ flowchart TD
 - `insufficientCoverage(findings)` — true on any of COV-1 (critical criterion,
   zero active tests), COV-2 (high-risk area, no active negative test), COV-3
   (active-criterion coverage ratio below the illustrative `0.8` threshold).
+- `minimumEvidence(findings)` — met when at least one acceptance criterion has an
+  active (passed) test mapped to it. It is the zero point of the COV-3 ratio, so it
+  adds no new threshold. A floor, not proof of verification.
 - `securityFailure(findings)` — true on SEC-1 (open `security: true` defect at a
   qualifying severity) or SEC-2 (a `security`-area criterion with zero active
   tests).

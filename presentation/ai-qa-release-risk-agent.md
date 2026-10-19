@@ -183,6 +183,7 @@ Rules run **in order; first match wins**.
 | **GATE-2** | security failure (`SEC-1` open security defect / `SEC-2` security AC uncovered) | **NO GO** |
 | **GATE-3** | **critical** acceptance criterion, zero active coverage | **NO GO** |
 | **GATE-4** | change risk **high** *and* coverage **insufficient** | **CONDITIONAL** |
+| **GATE-6** | no passing test mapped to any acceptance criterion (minimum evidence) | **CONDITIONAL** |
 | **GATE-5** | none of the above | **GO** |
 | **FAIL_SAFE** | findings invalid / pipeline broke | **NO GO** |
 

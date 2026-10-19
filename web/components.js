@@ -269,18 +269,35 @@ function decisionHero(report, summary, cov, decision) {
       <span class="decision-box__meta">Deterministic gate${report.firedRule ? ` · <span class="mono">${esc(report.firedRule)}</span>` : ""}</span>
       <p class="decision-box__authority">Decided by the deterministic QA gate from the submitted evidence. AI analysis explains the risk; it does not override this decision.</p>
     </div>
-    ${rationalePanel(report, decision)}
+    ${rationalePanel(report, decision, summary)}
   </section>`;
 }
 
-/** "Why release is blocked / conditional / cleared" — grounded entirely in the
- * gate's reasons, the rule identifiers embedded in them and the pipeline trace.
- * Nothing invented. */
-function rationalePanel(report, decision) {
+/** What a GO does and does not establish. Display only: the decision and the
+ * coverage verdict are read from the backend response, never computed here. */
+function goEvidenceNote(decision, summary) {
+  if (decision !== "GO") return null;
+  return summary?.testCoverage === "insufficient"
+    ? {
+      warn: true,
+      title: "Coverage is below the illustrative threshold.",
+      text: "Some verification may remain incomplete. This GO means no gate blocked the release on the evidence supplied; it does not show that every acceptance criterion has been verified.",
+    }
+    : {
+      warn: false,
+      title: "",
+      text: "GO means no gate blocked this release on the evidence supplied. It does not show that every acceptance criterion or business rule has been verified.",
+    };
+}
+
+/** "Why release is blocked / conditional" and the neutral "Release decision rationale" for a GO —
+ * grounded entirely in the gate's reasons, the rule identifiers embedded in them and the pipeline
+ * trace. Nothing invented. */
+function rationalePanel(report, decision, summary) {
   const reasons = Array.isArray(report.reasons) ? report.reasons : [];
   const heading = decision === "NO_GO" ? "Why this release is blocked"
     : decision === "CONDITIONAL" ? "Why this release is conditional"
-    : decision === "GO" ? "Why this release is cleared"
+    : decision === "GO" ? "Release decision rationale"
     : "Why no decision is available";
 
   const lead = reasons.length
@@ -301,6 +318,13 @@ function rationalePanel(report, decision) {
   return `<div class="rationale">
     <div class="rationale__head"><span class="ico">${ICONS.scale}</span><div><span class="eyebrow" style="margin:0">Executive summary</span><h3>${esc(heading)}</h3></div></div>
     <p class="rationale__lead">${esc(lead)}</p>
+    ${(() => {
+      const note = goEvidenceNote(decision, summary);
+      if (!note) return "";
+      return note.warn
+        ? `<div class="banner banner--warn" role="note" style="margin:0"><span class="ico">${ICONS.alert}</span><div><b>${esc(note.title)}</b> ${esc(note.text)}</div></div>`
+        : `<p class="rationale__note">${esc(note.text)}</p>`;
+    })()}
     <div>
       <span class="eyebrow">${ruleIds.length > 1 ? "Applied gate rules" : "Applied gate rule"}</span>
       ${ruleIds.length
@@ -913,6 +937,10 @@ function printReport(result, report, summary, cov, ctx, meta, decision) {
       <div class="pr-hero__reason">
         <span class="pr-eyebrow">Decision reason</span>
         <p>${esc(reasons[0] || "The deterministic QA gate reported no blocking reasons for this release.")}</p>
+        ${(() => {
+          const note = goEvidenceNote(decision, summary);
+          return note ? `<p class="pr-notice${note.warn ? " pr-notice--warn" : ""}">${note.warn ? `<b>${esc(note.title)}</b> ` : ""}${esc(note.text)}</p>` : "";
+        })()}
       </div>
     </div>
 

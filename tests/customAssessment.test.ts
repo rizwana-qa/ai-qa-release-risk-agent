@@ -19,7 +19,7 @@ import { analyzeEvidence } from "../api/evidenceAnalyzer.ts";
 import { adaptAgentFindingsToReleaseFindings } from "../src/findingsAdapter.ts";
 import { evaluateReleaseGate } from "../src/releaseGate.ts";
 import {
-  coachingPayload, healthyPayload, conditionalPayload, noEvidenceSecurityPayload,
+  coachingPayload, healthyPayload, conditionalPayload, noEvidenceSecurityPayload, thinPayload, thinTest,
 } from "./customFixtures.ts";
 
 let server: Server;
@@ -201,5 +201,114 @@ describe("REQ-BEN-001 regression is unchanged", () => {
     const r = await postJson("/api/assess?id=REQ-BEN-001", {});
     assert.equal(r.body.report.releaseDecision, "NO_GO");
     assert.equal(r.body.report.firedRule, "GATE-2");
+  });
+});
+
+describe("minimum evidence (GATE-6) through the API", () => {
+  const run = async (payload: unknown) => (await postJson("/api/assess/custom?blocking=1", payload)).body;
+
+  for (const [name, tests] of [
+    ["zero test cases", []],
+    ["failed-only tests", [thinTest("Failed", ["AC1"])]],
+    ["not-run-only tests", [thinTest("Not Run", ["AC1"])]],
+    ["quarantined-only tests", [thinTest("Quarantined", ["AC1"])]],
+    ["blocked and skipped only", [thinTest("Blocked", ["AC1"], "T1"), thinTest("Skipped", ["AC2"], "T2")]],
+    ["a test with no recognised status", [thinTest("", ["AC1"])]],
+    ["an unmapped passing test", [thinTest("Passed", [])]],
+    ["a passing test mapped only to an unknown criterion", [thinTest("Passed", ["AC99"])]],
+  ] as const) {
+    it(`${name} -> CONDITIONAL / GATE-6, and the decision is the gate's`, async () => {
+      const payload = thinPayload({ testCases: tests });
+      const b = await run(payload);
+      assert.equal(b.report.releaseDecision, "CONDITIONAL");
+      assert.equal(b.report.firedRule, "GATE-6");
+      assert.match(b.report.reasons[0], /^GATE-6: no passing test is mapped to any acceptance criterion/);
+      assert.match(b.report.reasons[0], /additional verification and review are required/);
+      assert.equal(b.summary.testCoverage, "insufficient");
+      assert.equal(b.report.releaseDecision, independentDecision(payload).decision);
+    });
+  }
+
+  it("a passing test mapped to a criterion satisfies the minimum; the other gates decide (GO / GATE-5 here)", async () => {
+    const b = await run(thinPayload({ testCases: [thinTest("Passed", ["AC1"])] }));
+    assert.equal(b.report.releaseDecision, "GO");
+    assert.equal(b.report.firedRule, "GATE-5");
+  });
+
+  it("nonzero coverage below 0.8 at medium risk keeps GO / GATE-5 and reports COV-3 (existing behaviour)", async () => {
+    const b = await run(thinPayload({ testCases: [thinTest("Passed", ["AC1"])] }));
+    assert.equal(b.summary.changeRisk, "medium");
+    assert.equal(b.summary.testCoverage, "insufficient");
+    assert.match(b.report.reasons.join(" "), /COV-3: .*0\.33 is below threshold 0\.8/);
+    assert.equal(b.coverageStats.coveragePercent, 33);
+  });
+
+  it("coverage at or above 0.8 keeps GO / GATE-5 and sufficient coverage", async () => {
+    const b = await run(thinPayload({
+      testCases: [thinTest("Passed", ["AC1"], "T1"), thinTest("Passed", ["AC2"], "T2"), thinTest("Passed", ["AC3"], "T3")],
+    }));
+    assert.equal(b.report.releaseDecision, "GO");
+    assert.equal(b.summary.testCoverage, "sufficient");
+  });
+
+  it("a passing mapped test plus a failed test: the minimum is met, the decision is unchanged, and the failure stays in the report", async () => {
+    const b = await run(thinPayload({ testCases: [thinTest("Passed", ["AC1"], "T1"), thinTest("Failed", ["AC2"], "T2")] }));
+    assert.equal(b.report.firedRule, "GATE-5");
+    assert.equal(b.coverageStats.failed, 1);
+    assert.equal(b.coverageStats.passed, 1);
+  });
+
+  it("existing NO_GO rules keep precedence over insufficient evidence", async () => {
+    const critical = await run(thinPayload({ acceptanceCriteria: [{ area: "orders", critical: true, text: "Critical criterion" }] }));
+    assert.equal(critical.report.firedRule, "GATE-3");
+    const highRisk = await run(thinPayload({ acceptanceCriteria: [{ area: "payments", critical: false, text: "Pay by card" }] }));
+    assert.equal(highRisk.report.releaseDecision, "NO_GO");
+    assert.equal(highRisk.report.firedRule, "GATE-3");
+    const defect = await run(thinPayload({ knownDefects: [{ label: "D", severity: "critical", status: "open", area: "orders", description: "x" }] }));
+    assert.equal(defect.report.firedRule, "GATE-1");
+    const security = await run(thinPayload({ acceptanceCriteria: [{ area: "security", critical: false, text: "Access is restricted" }] }));
+    assert.equal(security.report.firedRule, "GATE-2");
+  });
+
+  it("several conditions at once report the earliest gate (GATE-1 before GATE-3 before GATE-6)", async () => {
+    const b = await run(thinPayload({
+      acceptanceCriteria: [{ area: "orders", critical: true, text: "Critical criterion" }],
+      knownDefects: [{ label: "D", severity: "critical", status: "open", area: "orders", description: "x" }],
+    }));
+    assert.equal(b.report.firedRule, "GATE-1");
+  });
+
+  it("an open non-critical defect with zero tests is still CONDITIONAL / GATE-6", async () => {
+    const b = await run(thinPayload({ knownDefects: [{ label: "D", severity: "medium", status: "open", area: "orders", description: "x" }] }));
+    assert.equal(b.report.firedRule, "GATE-6");
+  });
+
+  it("the release-level criticality field does not change the outcome", async () => {
+    const b = await run(thinPayload({ criticality: "critical", testCases: [thinTest("Passed", ["AC1"])] }));
+    assert.equal(b.report.firedRule, "GATE-5");
+  });
+
+  it("a high-risk change with a passing positive test keeps CONDITIONAL / GATE-4 (existing result, unchanged id)", async () => {
+    const b = await run(conditionalPayload());
+    assert.equal(b.report.firedRule, "GATE-4");
+  });
+
+  it("missing, malformed and invalid evidence keep the existing validation (HTTP 422, no run)", async () => {
+    for (const bad of [
+      thinPayload({ acceptanceCriteria: [] }),
+      thinPayload({ releaseScope: "" }),
+      thinPayload({ knownDefects: [{ severity: "urgent", status: "open", description: "x" }] }),
+    ]) {
+      const r = await postJson("/api/assess/custom?blocking=1", bad);
+      assert.equal(r.status, 422);
+      assert.equal(r.body.ok, false);
+    }
+  });
+
+  it("AI output cannot decide: a model-supplied decision is still rejected by the existing validator", async () => {
+    const { validateAgentFindings } = await import("../src/agentOutputValidation.ts");
+    const { cloneValidAgentFindings } = await import("./agentFixtures.ts");
+    const v = validateAgentFindings({ ...cloneValidAgentFindings(), decision: "GO" });
+    assert.equal(v.ok, false);
   });
 });

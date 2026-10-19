@@ -173,7 +173,7 @@ describe("MCP server (Phase 4)", () => {
       assert.ok(["low", "medium", "high"].includes(level as string));
     }
     assert.ok(Array.isArray(d.criticalAcceptanceCriteriaRule.criticalAreas));
-    assert.deepEqual(d.releaseGateRules.evaluationOrder, ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-5"]);
+    assert.deepEqual(d.releaseGateRules.evaluationOrder, ["GATE-1", "GATE-2", "GATE-3", "GATE-4", "GATE-6", "GATE-5"]);
   });
 
   /* ---- compatibility with the Phase 3 ReleaseFindings contract ---- */
